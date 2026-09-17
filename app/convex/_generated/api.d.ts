@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
 import type * as connection from "../connection.js";
+import type * as http from "../http.js";
 import type * as roles from "../roles.js";
 import type * as venues from "../venues.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bookings: typeof bookings;
   connection: typeof connection;
+  http: typeof http;
   roles: typeof roles;
   venues: typeof venues;
 }>;

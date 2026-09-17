@@ -520,3 +520,28 @@ Added 2026-09-18. `SPEC.md` §1 lists these as in-scope v1 user stories, but no 
 2. No role-scoped query (`listMyBookings`, `listMyVenues`, `getMyVenueStats`, `listBookingsForMyVenues`, `listPendingVenues`, `getMetrics`, etc.) fires for a suspended user — the check happens before `RoleDashboard` renders `children`.
 3. An un-suspended user's dashboard is unaffected — verify the existing role-mismatch redirect and loading-state behavior in `RoleDashboard.tsx` still work.
 4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 27 — Fix broken Convex Auth HTTP wiring (DONE 2026-09-18, critical)
+
+**Goal:** Fix a severe, previously-undetected bug: real sign-in through a browser has never actually worked on the dev deployment. Every prior "auth" test in this project (Tasks 4, 8, 12a, 22, 26, etc.) used `convex-test`'s `withIdentity()`, which injects a fake identity directly and completely bypasses real JWT issuance/verification — so this was invisible to the entire test suite until a real browser login was attempted for the first time (while seeding the `demo@example.com` account for the user).
+
+**Root cause:** `@convex-dev/auth` requires an `convex/http.ts` file that registers `auth.addHttpRoutes(http)` — this serves the JWKS discovery endpoint and auth HTTP callbacks the client relies on. **This file never existed in the codebase.** Additionally, the `JWKS` and `SITE_URL` Convex deployment environment variables (required alongside `JWT_PRIVATE_KEY` for token signing/verification) were never set — only `JWT_PRIVATE_KEY` existed, an incomplete/inconsistent configuration. The observable symptom: the browser console showed a repeating `WebSocket reconnected ... due to AuthProviderDiscoveryFailed` loop, and any successful `signIn()` call left the client stuck — `useConvexAuth()`'s `isAuthenticated` never resolved cleanly, so `AuthPanel`'s post-login redirect never fired.
+
+**Fix applied:**
+1. Added `convex/http.ts` with the standard `@convex-dev/auth` wiring (`auth.addHttpRoutes(http)`).
+2. Ran `npx @convex-dev/auth --web-server-url http://localhost:5173` to set `SITE_URL` on the dev deployment.
+3. Regenerated `JWT_PRIVATE_KEY` and `JWKS` as a matched pair (the tool only regenerates keys it detects are missing; since `JWT_PRIVATE_KEY` existed but `JWKS` didn't, it skipped key generation — unset `JWT_PRIVATE_KEY` first, then reran to get a consistent pair).
+4. Pushed via `npx convex dev --once` so `http.ts` is live on the dev deployment.
+5. Verified end-to-end in a real browser: seeded `demo@example.com`/`demo1234` (promoted to superadmin via `admin:promoteUserToSuperadmin`), signed in through the actual `/login` form, confirmed a clean redirect to `/admin` with no console errors and no reconnect loop.
+
+**This is also almost certainly still broken on the production Convex deployment** (`frugal-vole-549`) — `Task 11`/`Task 12a`'s "production" verification never exercised real browser sign-in either (Task 12a's criteria 2–3 used `--identity`, which also bypasses this entirely). **Do not consider production auth working until this same fix (http.ts push + SITE_URL/JWKS on the prod deployment) is verified there too, ideally via a real browser sign-in, not just CLI identity injection.**
+
+**Acceptance criteria (all met for dev, see `REVIEW.md`):**
+1. `convex/http.ts` exists and registers `auth.addHttpRoutes(http)`.
+2. Dev deployment has `SITE_URL`, `JWT_PRIVATE_KEY`, and `JWKS` all set and mutually consistent (no discovery-failure reconnect loop in the browser console after sign-in).
+3. A real sign-in through the `/login` form in a browser succeeds and redirects to the correct role dashboard, verified live (not just via `convex-test`).
+4. `npm test` and `npm run build` pass (no test coverage gap was closed by this fix — see the follow-up below).
+
+**Follow-up still needed (see Phase 11 and the note above):** verify and fix the same issue on the production Convex deployment before Task 11/12a are trusted for a real launch; consider adding at least one test that exercises real Convex Auth token issuance (not `withIdentity()`) so a regression here is caught automatically next time, since this entire class of bug was invisible to 53 passing tests.

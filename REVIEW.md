@@ -785,3 +785,39 @@ None. This closes Phase 10 — no known open code-fixable defects remain across 
 
 ### Follow-up tasks created
 None.
+
+## Task 27 — Fix broken Convex Auth HTTP wiring (critical)
+
+**Date completed:** 2026-09-18
+**Implemented by:** Claude Code
+**Reviewed by:** Claude Code (found and fixed in the same session — this is genuinely self-reviewed since it was discovered live while dogfooding, not implemented against a pre-written task brief; the fix is small, mechanical, and independently verified against a real browser session, which is stronger evidence than most `Reviewed by` entries in this file)
+
+### What was found
+Asked to improve the app's UI/UX and make sure `demo@example.com`/`demo1234` works, I seeded the demo account and then actually clicked through the login flow in a real browser for the first time in this project's history. It never redirected after login — stuck on `/login` showing only a "Sign out" button. Browser console showed a repeating `WebSocket reconnected ... due to AuthProviderDiscoveryFailed` loop.
+
+Traced the root cause: `@convex-dev/auth` requires a `convex/http.ts` file registering `auth.addHttpRoutes(http)` to serve the JWKS discovery endpoint and auth HTTP callbacks. **This file has never existed in the codebase**, going all the way back to Task 4. The dev deployment also only had `JWT_PRIVATE_KEY` set, missing its required companion `JWKS` and `SITE_URL` env vars.
+
+**Why 53 passing tests never caught this:** every single auth-related test in this project — Tasks 4, 5, 6, 7, 8, 12a, 22, 23, 24, 26, 26a — uses `convex-test`'s `t.withIdentity({subject: ...})`, which injects a fake identity directly into the query/mutation context and completely bypasses real JWT issuance, signing, and discovery. Task 12a's "production verification" used the same shortcut (`--identity` on the Convex CLI). Nobody — not Codex, not any of my prior reviews — ever exercised a real `signIn()` call through an actual browser session before this. The entire auth system was untested at the one layer that matters for a real user.
+
+### Fix applied
+1. Added `convex/http.ts` with `auth.addHttpRoutes(http)`.
+2. Ran `npx @convex-dev/auth --web-server-url http://localhost:5173` — set `SITE_URL` on the dev deployment.
+3. The tool detected `JWT_PRIVATE_KEY` already existed and skipped key generation, but `JWKS` was never set (an inconsistent state) — unset `JWT_PRIVATE_KEY` and reran so a matched `JWT_PRIVATE_KEY`/`JWKS` pair was generated together.
+4. `npx convex dev --once` to push `http.ts` live.
+5. **Verified live, end-to-end, in an actual browser** (not `convex-test`): cleared stale localStorage tokens (left over from before the key rotation), signed in at `/login` with `demo@example.com`/`demo1234`, confirmed a clean redirect to `/admin` rendering the real superadmin dashboard, and confirmed the console's reconnect-loop errors were gone after the fix (present before, absent after — direct before/after comparison).
+
+### Acceptance criteria check
+- [x] Criterion 1 — `convex/http.ts` exists, registers `auth.addHttpRoutes(http)`.
+- [x] Criterion 2 — dev deployment's `SITE_URL`/`JWT_PRIVATE_KEY`/`JWKS` all set and consistent; confirmed via `npx convex env get` for each and a clean browser console after the fix.
+- [x] Criterion 3 — real sign-in verified live in a real browser, redirecting correctly to `/admin`.
+- [x] Criterion 4 — `npm test` (53/53) and `npm run build` pass. This fix adds no new test coverage for the class of bug it fixes — flagged explicitly as a gap below.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — one new file, deployment env var configuration, no application logic changed.
+- Out-of-scope work done anyway: none, but see the "still needed" note in `TASKS.md` Task 27 — production is almost certainly in the same broken state and hasn't been fixed yet, since this session only touched the dev deployment.
+
+### Deviations / notes
+This is the single most consequential finding of the whole project so far: every previous "Complete" phase status in `ROADMAP.md` that depended on auth working (Phases 1, 2, 3, 4, 7) was true *at the Convex-function level* but the actual product — a person opening the site and logging in — has been broken since Task 4. This wasn't caught earlier because CLAUDE.md's review process (which this file has followed rigorously) checks acceptance criteria against `convex-test`/CLI evidence, and nobody had a reason to open an actual browser until asked to today. Worth internalizing as a process lesson: **`convex-test`/`--identity` proves the authorization logic is correct once a session exists; it does not prove a session can ever be created.** Both need real coverage.
+
+### Follow-up tasks created
+- Carried in `TASKS.md` Task 27's own text: verify/fix the same issue on production before trusting Task 11/12a, and consider adding a test that exercises real token issuance (not `withIdentity()`).
