@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import Button from './ui/Button'
+import { markSignOutInProgress } from '../lib/auth-navigation'
 
 type Role = 'player' | 'venueOwner' | 'superadmin'
 
@@ -22,6 +23,7 @@ export default function AppShell({ role, children }: { role: Role; children: Rea
 
   async function signOutAndReturnHome() {
     setIsSigningOut(true)
+    markSignOutInProgress()
     try {
       await signOut()
     } catch {

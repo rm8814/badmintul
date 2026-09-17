@@ -938,3 +938,28 @@ The shell and suspended-user gate remain shared wrappers; panel internals were l
 
 ### Follow-up tasks created (if any)
 None.
+## Task 28a — Fix sign-out landing on `/login` instead of `/`
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." The task's own acceptance criterion explicitly warned that a race condition "may not reproduce every single time — confirm it's actually fixed, not just working once," so a single pass wasn't enough — I stress-tested it with three full login/sign-out cycles in a real browser.
+
+### How it works
+`auth-navigation.ts` exports a module-level mutable flag (`signOutInProgress`) and a setter (`markSignOutInProgress`). `AppShell.tsx` calls the setter synchronously, before `await signOut()` — so by the time `isAuthenticated` later flips to `false` and triggers a re-render, the flag is already `true`. `RoleDashboard.tsx`'s effect now checks `if (signOutInProgress || ...) return` first, so it no longer fires its own `window.location.replace('/login')` during a sign-out-caused auth transition, leaving `AppShell`'s explicit `window.location.replace('/')` as the only navigation that happens.
+
+### Acceptance criteria check
+- [x] **Criterion 1 — independently verified with 3 full login → sign-out cycles in a real browser, not just one.** Signed in as `demo@example.com`, clicked Sign out, landed on `/`. Repeated two more times from a fresh `/login` load each time. All three landed on `/`, zero landed on `/login`. The fix is genuinely deterministic, not just working by luck on the first try.
+- [x] Criterion 2 — verified in code: the unauthenticated-visitor and role-mismatch branches in `RoleDashboard.tsx`'s effect are unchanged; only the top-level `signOutInProgress ||` guard was added.
+- [x] Criterion 3 — `npm test` (61/61, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The fix relies on an unreset module-level flag, which Codex's own note flags honestly: it "resets on a full page load, so it cannot suppress future unrelated auth redirects." This is safe *today* because the app's entire navigation model is full-page `window.location.replace` calls (no client-side router) — every sign-out forces a real page load, which reinitializes the module and clears the flag automatically. This is a fragile assumption baked into the fix, not a bug: if this codebase ever migrates to client-side routing (e.g., adopting a router in a future task) without revisiting this flag, `signOutInProgress` could get stuck `true` and silently disable `RoleDashboard`'s legitimate unauthenticated/role-mismatch redirects for the rest of that session. Flagging as forward-looking technical debt, not something to fix now — correct trade-off for the current architecture, worth a comment in the code or a note here for whoever touches routing next.
+
+### Follow-up tasks created
+None now — the technical-debt note above is not actionable until/unless a routing migration is ever proposed; recorded here so it isn't rediscovered from scratch at that point.

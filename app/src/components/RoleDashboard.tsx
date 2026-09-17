@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react'
 import { useConvexAuth } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
 import AppShell from './AppShell'
+import { signOutInProgress } from '../lib/auth-navigation'
 
 type Role = 'player' | 'venueOwner' | 'superadmin'
 
@@ -11,7 +12,7 @@ export default function RoleDashboard({ role, children }: { role: Role; children
   const user = useQuery(api.roles.getCurrentUser, isAuthenticated ? {} : 'skip')
 
   useEffect(() => {
-    if (isLoading || (isAuthenticated && user === undefined)) return
+    if (signOutInProgress || isLoading || (isAuthenticated && user === undefined)) return
     if (!isAuthenticated) {
       window.location.replace('/login')
     } else if (!user || user.role !== role) {

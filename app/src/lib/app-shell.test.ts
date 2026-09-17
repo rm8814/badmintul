@@ -10,10 +10,12 @@ describe('Task 28 authenticated app shell', () => {
     expect(shell).toContain('Signing out…')
     expect(shell).toContain('await signOut()')
     expect(shell).toContain("window.location.replace('/')")
+    expect(shell).toContain('markSignOutInProgress()')
   })
 
   it('wraps both normal and suspended dashboard states in the shell', () => {
     expect(dashboard).toContain('<AppShell role={role}>')
     expect(dashboard).toContain('user.suspended === true')
+    expect(dashboard).toContain('signOutInProgress ||')
   })
 })
