@@ -157,6 +157,20 @@
 
 ---
 
+## Task 9a — Landing page `/login` link (DONE 2026-09-17)
+
+**Goal:** Fix the missing `/login` navigation on the landing page found during Task 9's independent review (see `REVIEW.md`).
+
+**Scope boundaries:**
+- IN: Add a working `/login` link to `Landing.tsx` alongside the existing `/signup` CTA.
+- OUT: No other landing-page changes.
+
+**Acceptance criteria (all met, see `REVIEW.md` Task 9):**
+1. `npm test` passes, including `landing.test.ts`'s `/login` assertion.
+2. A manual click-through from `/` reaches the login form.
+
+---
+
 ## Task 10 — PWA: manifest, service worker, installability
 
 **Goal:** The app is installable and the app shell works offline.
@@ -210,7 +224,78 @@
 **Goal:** Complete the live-environment checks that require seeded production data and Hostinger access.
 
 **Acceptance criteria:**
-1. Seed one player, one venue owner, one superadmin, one approved venue, and one court in production using a controlled/manual process.
-2. Re-run the concurrent booking race against the production Convex URL and record exactly one success.
-3. Re-run the cross-owner venue access attempt against production and record rejection.
-4. Upload the production `app/dist/` bundle to Hostinger and verify `https://badmintul.com` reads and writes production Convex data.
+1. ~~Seed one player, one venue owner, one superadmin, one approved venue, and one court in production using a controlled/manual process.~~ **DONE 2026-09-17** — see `REVIEW.md` Task 12a.
+2. ~~Re-run the concurrent booking race against the production Convex URL and record exactly one success.~~ **DONE 2026-09-17.**
+3. ~~Re-run the cross-owner venue access attempt against production and record rejection.~~ **DONE 2026-09-17.**
+4. Upload the production `app/dist/` bundle to Hostinger and verify `https://badmintul.com` reads and writes production Convex data. **STILL BLOCKED** — no Hostinger credentials available. See Task 16 below for the prep work that can happen ahead of credentials arriving.
+
+---
+
+# Phase 8 — Route Architecture, Admin Operability & Deploy Readiness
+
+Added 2026-09-17 after independent review of Tasks 1–12a surfaced four real gaps that don't block the app functioning today, but do block calling Phases 2, 6, and 7 (per `ROADMAP.md`) genuinely complete: dashboards aren't actually routed, there's no repeatable superadmin bootstrap, availability rendering silently assumes browser-local time equals WIB, and Hostinger deploy readiness has no written runbook. None of these are urgent bugs; all are debt worth closing before Task 11/12a criterion 4 is attempted for real, since fixing routing or timezone handling *after* the site is live is more disruptive than fixing it now.
+
+**Ordering:** Task 13 first (touches the most surface area — every panel's entry point), then 14 and 15 (independent of each other and of 13, can be done in either order), then 16 last (pure documentation, lowest risk, easiest to defer).
+
+---
+
+## Task 13 — Role-based dashboard routing
+
+**Goal:** Give each role a real, distinct dashboard URL, per `SPEC.md` §4.3 ("a superadmin can log in to a distinct dashboard view") and §4.7 ("role-based routing... enforced both in UI routing and in Convex function-level auth checks"). Currently `AuthPanel`, `VenueOwnerPanel`, `SuperadminPanel`, and `PlayerBrowsePanel` are all stacked on the single `Home` page and each self-hides based on role — the *access* boundary is real (Convex-side checks are untouched and unaffected by this task), but there's no actual per-role route, which is a gap flagged in `REVIEW.md` Task 6.
+
+**Scope boundaries:**
+- IN: Real routes for `/player`, `/venue-owner`, and `/admin` (or equivalent paths), each rendering only its own panel. After a successful login/signup, redirect the user to their role's dashboard route automatically. Visiting a role-mismatched dashboard route (e.g., a player hitting `/admin`) redirects away rather than silently rendering nothing. Keep `/`, `/login`, `/signup` as they are today (the existing lightweight pathname-switch approach in `App.tsx` can be extended — a full router dependency is not required for 4–6 routes, but may be used if it's cleaner than extending the manual switch).
+- OUT: No nested sub-routes within a dashboard (e.g., no `/admin/venues/:id`). No changes to any Convex function — this is UI routing only, and the existing server-side role checks remain the actual security boundary; this task must not be treated as a substitute for them.
+
+**Acceptance criteria:**
+1. Visiting `/player`, `/venue-owner`, `/admin` directly as the matching role renders only that role's dashboard content.
+2. Visiting a role-mismatched dashboard route redirects (e.g., to `/` or `/login`) rather than rendering a blank/empty panel.
+3. After login/signup, the user lands on their own role's dashboard route without a manual navigation step.
+4. Existing Convex-level role checks are unchanged — verify `npm test` still passes with no modifications to `convex/*.ts` role-check logic.
+5. `npm run build` passes; manual click-through confirms all three dashboard routes and the redirect behavior.
+
+---
+
+## Task 14 — Superadmin seeding script + runbook
+
+**Goal:** Replace the informal "insert a `users` row via the Convex dashboard" note (from `REVIEW.md` Task 6) with an actual repeatable, documented process, closing the `RISKS.md` R-6 (bus-factor) gap this creates today.
+
+**Scope boundaries:**
+- IN: A Convex `internalMutation` (not a public `mutation`) that promotes an existing user to `superadmin` by email, callable only via `npx convex run` by someone with deploy access — same CLI-only pattern already proven safe in Task 12a's temporary seed script, but this one is permanent since real launch needs it repeatedly (new superadmins over time), not a one-off. A short runbook section added to `app/README.md` with the exact command and a warning that it requires deploy-level Convex access.
+- OUT: No UI for this. Per `SPEC.md` and the existing Task 4 design, there must remain no public "become superadmin" path — this task must not create one, even accidentally (e.g., don't expose it as a regular `mutation` reachable from the client bundle).
+
+**Acceptance criteria:**
+1. A function (e.g., `convex/admin.ts` or a new file) is declared with Convex's `internalMutation`, not `mutation`, and sets `role: "superadmin"` on the user matching a given email; it throws a clear error if no such user exists.
+2. Confirm the function does not appear in the client-reachable API surface used by the React app (i.e., it's not imported/called from any `src/` file) — an `internalMutation` is only reachable via the Convex CLI/dashboard, not `api.*` from the client.
+3. `app/README.md` documents the exact `npx convex run` invocation (dev and prod variants) to promote a user to superadmin.
+4. `npm test` and `npm run build` pass; a test confirms the promotion mutation works when invoked directly (e.g., via `convex-test`) and that a non-existent email throws.
+
+---
+
+## Task 15 — Timezone-explicit booking availability
+
+**Goal:** `SPEC.md` §5 assumes a single timezone (WIB / Asia/Jakarta) for all booking logic, but `PlayerBrowsePanel`'s current day-boundary and slot-time calculations use `new Date()` and `toLocaleTimeString()` with no explicit timezone — meaning "today's" slot boundaries and displayed times silently follow whatever timezone the *browser* is set to, not WIB. This is currently invisible because development happens in a WIB-adjacent environment, but it's a real correctness gap flagged in `REVIEW.md` Task 7's review, worth closing before more of the booking UI is built on top of it.
+
+**Scope boundaries:**
+- IN: Pin day-start/day-end and slot-time calculations, and their display formatting, explicitly to `Asia/Jakarta` (e.g., via `Intl.DateTimeFormat` with `timeZone: 'Asia/Jakarta'`, or a small shared date utility in `app/src/lib/`) rather than relying on browser-local time.
+- OUT: No timezone picker or multi-timezone support — single hardcoded WIB, per `SPEC.md` §5's explicit non-goal.
+
+**Acceptance criteria:**
+1. Day-start/day-end and slot start-time calculations are computed relative to Asia/Jakarta explicitly — verified by a test that mocks the system/browser timezone away from WIB (e.g., via `vi.stubEnv`/`Intl` mocking or running the relevant calculation with a non-WIB `TZ` env var) and confirms the computed slot boundaries don't shift.
+2. Displayed slot times use an explicit Asia/Jakarta format, not implicit browser-local formatting.
+3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 16 — Hostinger deploy runbook & CORS checklist (prep only, no credentials required)
+
+**Goal:** Get everything that can be prepared *without* Hostinger credentials fully ready, so that once credentials are available, Task 11 and Task 12a criterion 4 can be executed in one short session rather than figuring out steps at that point. This is documentation work, not a code change, and explicitly does not require access this task doesn't have.
+
+**Scope boundaries:**
+- IN: A written, numbered, copy-pasteable runbook (new `DEPLOY.md` at repo root, or a section in `app/README.md`) covering: the exact production build command, the exact Hostinger upload target (public web root) and method (FTP/File Manager), the exact Convex CORS/allowed-origins configuration needed for `https://badmintul.com` (dashboard location or CLI command), and a pre-flight checklist confirming `app/dist`'s bundled `VITE_CONVEX_URL` is the production URL, not dev.
+- OUT: No actual FTP upload, no DNS/HTTPS changes, no live verification — all of that remains Task 11/12a's job once Hostinger credentials exist. This task produces the runbook only.
+
+**Acceptance criteria:**
+1. `DEPLOY.md` (or the equivalent `app/README.md` section) exists with a numbered runbook covering build, upload target/method, and CORS/allowed-origins steps.
+2. The Convex CORS/allowed-origins requirement for `https://badmintul.com` is documented with the exact dashboard location or CLI command to set it (per `RISKS.md` R-7).
+3. The runbook includes an explicit pre-flight check (e.g., a `grep` command) to confirm the built `app/dist` bundle references the production Convex URL, not the dev one, before upload.
