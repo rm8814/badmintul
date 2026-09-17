@@ -668,3 +668,97 @@ Process note: Codex worked on this without logging a task in `TASKS.md` first, a
 
 ### Follow-up tasks created
 - **Advisory, not blocking:** if a user reports landing on a dashboard/login route with an unexpectedly stale role again, investigate whether Convex Auth sessions need an explicit invalidation step after a superadmin promotion (Task 14's `promoteUserToSuperadmin`), rather than relying on the promoted user to notice and sign out themselves.
+## Task 23 — Court availability blocking (maintenance slots)
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified against `convex/venues.ts`, `convex/bookings.ts`, `convex/schema.ts`, and `court-blocks.test.ts`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `requireOwnedCourt` walks court → venue → `ownerId`, same pattern as `getMyVenue`'s R-8 check. `court-blocks.test.ts` proves cross-owner block creation *and* removal both reject with "does not belong."
+- [x] Criterion 2 — verified: `createCourtBlock` queries for an overlapping confirmed booking before inserting and throws if found.
+- [x] **Criterion 3 — this is the R-4-adjacent one, and it genuinely holds.** Read `bookings.ts`'s `createBooking`: the existing booking-conflict check and the new `courtBlocks` overlap check both happen as reads inside the same mutation handler, before the single `ctx.db.insert`, so Convex's transactional guarantee covers both — no new read-then-write race window was introduced. `court-blocks.test.ts` proves a booking into a blocked slot is rejected.
+- [x] Criterion 4 — verified in `PlayerBrowsePanel.tsx`: a `getCourtBlocks` query feeds a third grid state ("Blocked", `brand-warning` styling) distinct from "Booked" (`brand-danger`) and "Book" (open, `brand-success`).
+- [x] Criterion 5 — `npm test` (52/52 across 26 files, re-run in this review) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. Single time-range blocks only.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None.
+
+### Follow-up tasks created
+None.
+## Task 24 — Venue owner: bookings view
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified against `bookings.ts`'s `listBookingsForMyVenues`/`getOwnedVenueCourts` and `venue-operations.test.ts`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `getOwnedVenueCourts` (shared with Task 25) derives the caller's venues via `by_ownerId`, then their courts via `by_venueId` — no client-supplied id anywhere in the path. `venue-operations.test.ts` seeds two owners' bookings and confirms owner A's query returns exactly the one booking belonging to A's court.
+- [x] Criterion 2 — verified: the query takes `args: {}`, nothing else — scoping is entirely server-derived from the authenticated identity.
+- [x] Criterion 3 — `npm test` (52/52, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. The view is read-only with no owner-side booking modification or filtering UI.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+Booking display includes venue name, court name, explicit WIB-formatted time, and status.
+
+### Follow-up tasks created (if any)
+None.
+
+## Task 25 — Venue owner: revenue/utilization stats
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified against `bookings.ts`'s `getMyVenueStats` and `venue-operations.test.ts`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: aggregates over `getOwnedVenueCourts` (owner-scoped), summing `court.pricePerHour` per confirmed booking for revenue, and a 7-day booked-hours/open-hours ratio for utilization. `VenueOwnerPanel.tsx` renders both per venue.
+- [x] Criterion 2 — **independently recomputed, not just re-read.** The test seeds 3 confirmed bookings at IDR 250/hour each on one venue; 3 × 250 = 750, matching the test's asserted `revenue: 750` exactly. Re-ran `venue-operations.test.ts` directly — passes.
+- [x] Criterion 3 — `npm test` (52/52, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. No charting library, date-range picker, or historical report was added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+Utilization is a seven-day snapshot using each court's configured daily operating-hours window as the denominator.
+
+### Follow-up tasks created (if any)
+None.
+## Task 26 — Superadmin: suspend a venue or user
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." The Convex-layer enforcement is solid and independently verified — but this review found a real, unaddressed consequence of that enforcement: **a suspended user's dashboard crashes to a blank screen instead of showing any message**, because nothing in the React layer accounts for the new error path this task introduced.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `venues.suspended: v.optional(v.boolean())` added; `setVenueSuspended` is superadmin-gated; `listApprovedVenues` and `getApprovedVenue` both filter `suspended !== true`. `suspension.test.ts` proves a venue disappears on suspend and reappears on unsuspend.
+- [x] Criterion 2 — verified: `users.suspended` added; every role-check helper (`requirePlayer`/`requireVenueOwner`/`requireSuperadmin` in `bookings.ts`, `venues.ts`, `admin.ts`, plus `roles.ts`'s `getUserOrThrow`) now throws `"User account is suspended"` when `user.suspended === true`. `suspension.test.ts` proves a suspended player's `listMyBookings` call is rejected even with a still-valid identity — this is real enforcement of a live session, not just blocking new logins.
+- [x] Criterion 3 — verified: a player attempting `setUserSuspended` is rejected with `"Superadmin role required"`.
+- [x] Criterion 4 — `npm test` (52/52, re-run) and `npm run build` pass.
+
+**Gap found (not in the self-review, not covered by any test):** every dashboard panel (`PlayerBrowsePanel`, `VenueOwnerPanel`, `SuperadminPanel`) fires its role-scoped queries unconditionally for any user matching the route's role — e.g. `PlayerBrowsePanel.tsx`: `useQuery(api.bookings.listMyBookings, user?.role === 'player' ? {} : 'skip')`. None of them check `user.suspended` before firing. Traced what happens when they don't skip: Convex's `useQuery` (confirmed by reading `node_modules/convex/dist/esm/react/client.js:462-465`) **re-throws synchronously** if the query result is an `Error` — `if (result instanceof Error) { throw result; }`. This app has **no `ErrorBoundary` anywhere** (confirmed via `grep -rn "ErrorBoundary" src/` — no matches). So a suspended player visiting `/player`, a suspended venue owner visiting `/venue-owner`, or a suspended superadmin visiting `/admin` will hit an uncaught render-time exception with nothing to catch it — the practical result is a blank/broken screen, not a "your account is suspended" message. `RoleDashboard.tsx` (the shared wrapper for all three routes) only checks `user.role !== role`, never `user.suspended`, so it doesn't prevent this either. This is exactly the scenario this project's own review standard exists to catch — enforcement that's correct at the data layer but produces an unhandled crash at the UI layer, invisible to `convex-test`-only test coverage since none of it exercises the React render path.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes for the Convex-layer work — suspension is a boolean toggle, no audit log/appeal flow.
+- Out-of-scope work done anyway: none. The crash gap wasn't caused by out-of-scope work; it's an interaction the task's IN scope didn't account for (the task brief only specified backend enforcement + the two Convex-level tests, not the React consequence of that enforcement).
+
+### Deviations / notes
+Authorization helpers remain per-file (not consolidated into one shared helper) — Codex flagged this choice explicitly rather than silently picking one, which is the right call to surface, not a defect.
+
+### Follow-up tasks created
+- **Task 26a (new, appended to `TASKS.md`):** Fix the suspended-user crash. Recommended approach: add the suspension check once in `RoleDashboard.tsx` (which already fetches `user` via `api.roles.getCurrentUser` and gates on role) rather than patching three separate panels' query conditions — if `user.suspended === true`, show a clear "Your account has been suspended" message instead of rendering `children`, before any role-scoped query fires. This is a single-point fix consistent with `RoleDashboard`'s existing job of gating access before its children ever mount.

@@ -504,3 +504,19 @@ Added 2026-09-18. `SPEC.md` §1 lists these as in-scope v1 user stories, but no 
 2. A superadmin can suspend and un-suspend a user; a suspended user's calls to role-scoped functions are rejected server-side (test this the same way Task 4/8's role-rejection tests work — call a function as a suspended user's identity and assert rejection), even though nothing about their Convex Auth token changed.
 3. A non-superadmin cannot suspend anything (existing `requireSuperadmin` check covers this — verify it wasn't bypassed).
 4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 26a — Fix suspended-user dashboard crash
+
+**Goal:** Fix a real gap found during independent review of Task 26 (see `REVIEW.md`): Task 26's Convex-layer enforcement is correct — every role-scoped query/mutation now rejects a suspended user, even with a still-valid session — but nothing in the React layer accounts for that new error path. `PlayerBrowsePanel`, `VenueOwnerPanel`, and `SuperadminPanel` all fire their role-scoped queries unconditionally once the user's role matches the route (never checking `suspended`). Convex's `useQuery` re-throws synchronously when a query result is an `Error`, and this app has no `ErrorBoundary` anywhere — so a suspended user visiting their dashboard route hits an uncaught render-time exception: a blank/broken screen, not a message explaining what happened.
+
+**Scope boundaries:**
+- IN: Add the suspension check in one place — `RoleDashboard.tsx`, which already fetches `user` via `api.roles.getCurrentUser` and gates on `user.role !== role` before rendering `children`. If `user.suspended === true`, render a clear "Your account has been suspended" message instead of `children`, so none of the three panels' role-scoped queries ever fire for a suspended user.
+- OUT: No audit log, appeal flow, or suspension-reason display — consistent with Task 26's own OUT scope. No changes to the individual panels themselves; the fix belongs in the shared gate, not three separate patches.
+
+**Acceptance criteria:**
+1. A suspended user visiting `/player`, `/venue-owner`, or `/admin` sees a clear "account suspended" message, not a blank/broken screen — verify by suspending a test user and confirming the message renders instead of a crash.
+2. No role-scoped query (`listMyBookings`, `listMyVenues`, `getMyVenueStats`, `listBookingsForMyVenues`, `listPendingVenues`, `getMetrics`, etc.) fires for a suspended user — the check happens before `RoleDashboard` renders `children`.
+3. An un-suspended user's dashboard is unaffected — verify the existing role-mismatch redirect and loading-state behavior in `RoleDashboard.tsx` still work.
+4. `npm test` and `npm run build` pass.
