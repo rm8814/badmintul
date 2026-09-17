@@ -10,6 +10,8 @@ describe('Task 19 availability calendar', () => {
     expect(source).toContain('sm:grid-cols-2')
     expect(source).toContain('brand-success')
     expect(source).toContain('brand-danger')
+    expect(source).toContain('Blocked')
+    expect(source).toContain('api.bookings.getCourtBlocks')
   })
 
   it('keeps the existing booking mutation and pending booking control', () => {

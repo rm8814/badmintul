@@ -8,6 +8,7 @@ async function requireSuperadmin(ctx: QueryCtx | MutationCtx) {
   if (!userId) throw new Error("Authentication required");
   const user = await ctx.db.get(userId);
   if (!user || user.role !== "superadmin") throw new Error("Superadmin role required");
+  if (user.suspended === true) throw new Error("User account is suspended");
 }
 
 export const listPendingVenues = query({
@@ -25,6 +26,26 @@ export const setVenueApproval = mutation({
     const venue = await ctx.db.get(args.venueId);
     if (!venue) throw new Error("Venue not found");
     await ctx.db.patch(args.venueId, { approvalStatus: args.status });
+  },
+});
+
+export const setVenueSuspended = mutation({
+  args: { venueId: v.id("venues"), suspended: v.boolean() },
+  handler: async (ctx, args) => {
+    await requireSuperadmin(ctx);
+    const venue = await ctx.db.get(args.venueId);
+    if (!venue) throw new Error("Venue not found");
+    await ctx.db.patch(args.venueId, { suspended: args.suspended });
+  },
+});
+
+export const setUserSuspended = mutation({
+  args: { userId: v.id("users"), suspended: v.boolean() },
+  handler: async (ctx, args) => {
+    await requireSuperadmin(ctx);
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+    await ctx.db.patch(args.userId, { suspended: args.suspended });
   },
 });
 

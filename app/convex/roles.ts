@@ -7,6 +7,7 @@ async function getUserOrThrow(ctx: QueryCtx) {
   if (!userId) throw new Error("Authentication required");
   const user = await ctx.db.get(userId);
   if (!user) throw new Error("Authenticated user record not found");
+  if (user.suspended === true) throw new Error("User account is suspended");
   return user;
 }
 

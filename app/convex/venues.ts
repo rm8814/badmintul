@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 
 const courtValidator = v.object({
   name: v.string(),
@@ -14,6 +15,7 @@ async function requireVenueOwner(ctx: QueryCtx | MutationCtx) {
   if (!userId) throw new Error("Authentication required");
   const user = await ctx.db.get(userId);
   if (!user || user.role !== "venueOwner") throw new Error("Venue owner role required");
+  if (user.suspended === true) throw new Error("User account is suspended");
   return userId;
 }
 
@@ -71,16 +73,46 @@ export const getMyVenue = query({
   },
 });
 
+async function requireOwnedCourt(ctx: QueryCtx | MutationCtx, courtId: Id<"courts">) {
+  const ownerId = await requireVenueOwner(ctx);
+  const court = await ctx.db.get(courtId);
+  if (!court) throw new Error("Court not found");
+  const venue = await ctx.db.get(court.venueId);
+  if (!venue || venue.ownerId !== ownerId) throw new Error("Court does not belong to the current owner");
+  return court;
+}
+
+export const createCourtBlock = mutation({
+  args: { courtId: v.id("courts"), startTime: v.number(), endTime: v.number(), reason: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requireOwnedCourt(ctx, args.courtId);
+    if (args.endTime <= args.startTime) throw new Error("Block end time must be after start time");
+    const booking = await ctx.db.query("bookings").withIndex("by_court_and_start", (q) => q.eq("courtId", args.courtId)).filter((q) => q.and(q.eq(q.field("status"), "confirmed"), q.lt(q.field("startTime"), args.endTime), q.gt(q.field("endTime"), args.startTime))).first();
+    if (booking) throw new Error("Cannot block a slot with an existing confirmed booking");
+    return await ctx.db.insert("courtBlocks", { courtId: args.courtId, startTime: args.startTime, endTime: args.endTime, reason: args.reason?.trim() || undefined });
+  },
+});
+
+export const removeCourtBlock = mutation({
+  args: { blockId: v.id("courtBlocks") },
+  handler: async (ctx, args) => {
+    const block = await ctx.db.get(args.blockId);
+    if (!block) throw new Error("Court block not found");
+    await requireOwnedCourt(ctx, block.courtId);
+    await ctx.db.delete(args.blockId);
+  },
+});
+
 export const listApprovedVenues = query({
   args: {},
-  handler: async (ctx) => await ctx.db.query("venues").withIndex("by_approvalStatus", (q) => q.eq("approvalStatus", "approved")).collect(),
+  handler: async (ctx) => (await ctx.db.query("venues").withIndex("by_approvalStatus", (q) => q.eq("approvalStatus", "approved")).collect()).filter((venue) => venue.suspended !== true),
 });
 
 export const getApprovedVenue = query({
   args: { venueId: v.id("venues") },
   handler: async (ctx, args) => {
     const venue = await ctx.db.get(args.venueId);
-    if (!venue || venue.approvalStatus !== "approved") return null;
+    if (!venue || venue.approvalStatus !== "approved" || venue.suspended === true) return null;
     const courts = await ctx.db.query("courts").withIndex("by_venueId", (q) => q.eq("venueId", args.venueId)).collect();
     return { ...venue, courts };
   },
