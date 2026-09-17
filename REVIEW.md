@@ -378,3 +378,215 @@ The existing Task 2 `connectionChecks` table remains in the schema so the connec
 
 ### Follow-up tasks created (if any)
 None.
+
+## Task 18 — Form submission states
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Independently confirmed in `AuthPanel.tsx` (`isSubmitting`), `VenueOwnerPanel.tsx` (`isSubmitting`), `SuperadminPanel.tsx` (`pendingAction`, shared across approve/reject so a second click can't fire mid-flight), and `PlayerBrowsePanel.tsx` (`pendingBooking`) — all four disable their control and show a distinct pending label during the `await`. Criteria as stated hold.
+
+### Acceptance criteria check
+- [x] Criterion 1 — auth, venue submission, approval/rejection, and booking controls disable during their awaited mutation calls.
+- [x] Criterion 2 — each action displays a distinct pending label: `Submitting…`, `Approving…`, `Rejecting…`, or `Booking…`.
+- [x] Criterion 3 — tests and build pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. No optimistic UI was added and Convex mutation logic was unchanged.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+Approval controls share one pending state so a second approval/rejection cannot be fired while the first is in flight.
+
+### Follow-up tasks created (if any)
+None.
+
+## Task 17 — Shared UI primitives
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Independently read `Button.tsx`, `TextField.tsx`, `FormField.tsx`, `Card.tsx`, `Select.tsx` — real focus-visible styling, real `<label htmlFor>` via `FormField`, real disabled-state styling on `Button`. Criteria as stated hold. `Card` is used by `VenueOwnerPanel`/`PlayerBrowsePanel`; `SuperadminPanel` was confirmed to also use `Card` by the time of this review (post Task 20), so the note below about it being deferred is now resolved.
+
+### Acceptance criteria check
+- [x] Criterion 1 — targeted panel controls now use shared styled text fields/selects/buttons with borders, padding, focus rings, and responsive token colors.
+- [x] Criterion 2 — every targeted input/select has a real label associated by `id`/`htmlFor` through `FormField`.
+- [x] Criterion 3 — `Button` supports primary, secondary, and danger variants plus visible disabled styling.
+- [x] Criterion 4 — UI-only refactor; Convex calls were not changed. Tests and build pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. No new tokens or component-library dependency added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+`Card` is used by the venue-owner and player panels; the superadmin panel remains structurally unchanged for Task 20’s dashboard-state pass.
+
+### Follow-up tasks created (if any)
+None.
+
+## Task 16 — Hostinger deploy runbook & CORS checklist
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Independently confirmed `DEPLOY.md` exists at repo root with the numbered build/upload/CORS/pre-flight steps described below, including the `Select-String` checks for the production vs. dev Convex URL. Criteria as stated hold.
+
+### Acceptance criteria check
+- [x] Criterion 1 — root `DEPLOY.md` contains numbered production build, Hostinger public-root upload, HTTPS, and verification steps.
+- [x] Criterion 2 — the runbook documents `npx convex dashboard --prod`, the production origin `https://badmintul.com`, and the current app’s lack of custom HTTP-action CORS handlers.
+- [x] Criterion 3 — the runbook includes `Select-String` checks that require the production Convex URL and reject the dev URL before upload.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. Documentation and tests only; no FTP, DNS, HTTPS, or live-site changes were attempted.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The exact dashboard labels for an allowed-origin field can vary by Convex Auth integration; the runbook directs the operator to the production dashboard and records that this app has no custom HTTP action requiring CORS headers. `npm test` and `npm run build` pass.
+
+### Follow-up tasks created (if any)
+None.
+
+## Task 15 — Timezone-explicit booking availability
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Criteria 1–3 as stated are accurate — but there's a scope gap the self-review didn't catch.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `wib.ts`'s `wibDayStartMs` uses `Intl.DateTimeFormat` with `timeZone: 'Asia/Jakarta'` to extract the WIB calendar date, then computes the UTC-ms boundary via `Date.UTC(...) - WIB_OFFSET_MS` — correct regardless of the executing browser/environment's own timezone.
+- [~] **Criterion 2 — mostly true, one real gap.** `PlayerBrowsePanel`'s availability grid does use `formatWibTime` (WIB-explicit) and labels the section "Availability (Asia/Jakarta)" — genuinely fixed. But the same file's "My bookings" list, two lines below, still renders `new Date(booking.startTime).toLocaleString()` — implicit browser-local formatting, the exact pattern this task exists to eliminate, just in a spot the task's own scope note (PlayerBrowsePanel) covers but the implementation missed. Minor in isolation, but it's the same bug class the task was written to close, in the same file, in the same task's diff.
+- [x] Criterion 3 — `npm test`/`npm run build` pass; `convex/bookings.ts` unchanged.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes on the WIB-vs-multi-timezone boundary (no picker added).
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The availability grid remains today-plus-navigable (Task 19 added the date nav on top of this task's WIB math).
+
+### Follow-up tasks created
+- **Task 15a (new, appended to `TASKS.md`):** Apply `formatWibTime`/explicit `Asia/Jakarta` formatting to the "My bookings" timestamp list in `PlayerBrowsePanel`, not just the availability grid — currently the only remaining browser-local-time display in this file.
+
+## Task 14 — Superadmin seeding script + runbook
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Content independently checked against `convex/admin.ts` and found accurate.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `promoteUserToSuperadmin` uses `internalMutation` (not `mutation`), lowercases/trims the email, finds the matching user, throws `"No user found for ${email}"` if none exists, otherwise patches `role: "superadmin"`.
+- [x] Criterion 2 — verified: `grep`-checked `src/` for any import of `promoteUserToSuperadmin` or reference via `api.admin.*` — none found; it's only reachable via `internal.admin.promoteUserToSuperadmin`, which the client bundle cannot call.
+- [x] Criterion 3 — `app/README.md` documents the dev/prod `npx convex run` invocations.
+- [x] Criterion 4 — `npm test`/`npm run build` pass; the function's own test exercises both the success and missing-user-throws paths via `convex-test`.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. No public promotion path, no UI added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None.
+
+### Follow-up tasks created
+None.
+
+## Task 13 — Role-based dashboard routing
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry with an unreviewed "Reviewed by: Claude Code / human" claim. Criteria 1–5 as stated are genuinely true and independently verified below — but a real gap exists that the self-review didn't catch and no test covers.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `App.tsx` routes `/player` → `<RoleDashboard role="player"><PlayerBrowsePanel /></RoleDashboard>`, same pattern for `/venue-owner` and `/admin`. `RoleDashboard.tsx` renders only its `children` once role matches.
+- [x] Criterion 2 — verified: `RoleDashboard`'s effect calls `window.location.replace('/login')` when unauthenticated, `window.location.replace('/')` when `user.role !== role`.
+- [x] Criterion 3 — verified: `AuthPanel.tsx`'s effect watches `isAuthenticated`/`user` and replaces to `/venue-owner`, `/admin`, or `/player` based on the persisted role once auth resolves.
+- [x] Criterion 4 — verified via `git diff --stat app/convex/` for the whole Phase 8/9 batch: this task touched no Convex files.
+- [x] Criterion 5 — `npm test` (40/40) and `npm run build` both pass on the full working tree.
+
+**Gap found (not in the self-review, not covered by `routing.test.ts`):** `App.tsx`'s fallback branch (anything that isn't `/`, `/login`, `/player`, `/venue-owner`, or `/admin` — which includes `/signup`, the route `Landing.tsx`'s "Booking Sekarang"/"Daftarkan venue" CTAs actually link to) still renders `Home.tsx`. `Home.tsx` was **not touched by this task** and still contains: (a) the Task 1/2 scaffold placeholder markup ("Phase 1 scaffold — Vite + React + TypeScript + Tailwind, ready for Convex and real screens", a "Tailwind pipeline check" div, a "Test query + mutation" button wired to `connection.recordCheck`) — dead UI that should have been removed once real screens existed, and (b) `AuthPanel` stacked directly above `VenueOwnerPanel`, `SuperadminPanel`, and `PlayerBrowsePanel` all rendered unconditionally — the exact "everything stacked on one page, self-hiding by role" pattern this task exists to eliminate. `routing.test.ts` only string-matches `App.tsx`/`RoleDashboard.tsx`/`AuthPanel.tsx` source and never reads `Home.tsx`, so this was invisible to the test suite. Practically: today a new visitor clicking "Daftarkan venue" (→ `/signup`) sees the scaffold placeholder junk and, immediately below the actual signup form, three more panels that call `useQuery`/render conditionally and correctly hide themselves for an unauthenticated visitor — so the *visible* damage right now is mostly the leftover scaffold text and the dead "Test query + mutation" button, not full panel leakage. But it's exactly the kind of debt this task was scoped to remove, and it's a regression waiting to surface (e.g., an authenticated venue owner who navigates back to `/signup` would see their own `VenueOwnerPanel` rendered a second time, disconnected from `/venue-owner`).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes for what was touched (`App.tsx`, `RoleDashboard.tsx`, `AuthPanel.tsx`) — but the task's actual goal ("give each role a real, distinct dashboard URL... currently stacked on the single Home page") was left incompletely done because `Home.tsx` itself was never revisited.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The app continues using its lightweight pathname routing instead of adding a router dependency — reasonable, consistent with `TASKS.md`'s own suggestion.
+
+### Follow-up tasks created
+- **Task 13a (new, appended to `TASKS.md`):** Clean up `Home.tsx` — remove the dead Task 1/2 scaffold placeholder markup and the four stacked panels, leaving only `AuthPanel` (this is what should render at `/login` and `/signup`, which is the entirety of what `Home.tsx` is used for now that Task 13 exists).
+## Task 19 — Booking availability: real calendar/grid layout
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Independently confirmed in `PlayerBrowsePanel.tsx`: a `grid-cols-1 sm:grid-cols-2` layout with success/danger-tinted cells, a legend row, and Previous/Next day buttons bounded to `[0, 3]` days ahead. `convex/bookings.ts` confirmed unchanged in this batch's diff. Criteria as stated hold.
+
+### Acceptance criteria check
+- [x] Criterion 1 — `PlayerBrowsePanel` now renders availability in a responsive two-column grid with distinct `brand-success` open and `brand-danger` booked states.
+- [x] Criterion 2 — players can move from today through the next three days with Previous day and Next day controls.
+- [x] Criterion 3 — booking still calls `api.bookings.createBooking`; `convex/bookings.ts` was unchanged.
+- [x] Criterion 4 — `npm test` and `npm run build` pass (36 tests across 17 files).
+
+### Scope boundary check
+Stayed inside the declared scope: yes. No multi-court comparison or week/month calendar was added.
+
+### Deviations / notes
+Date arithmetic and displayed dates continue to use the explicit `Asia/Jakarta` timezone from Task 15. Previous day is disabled at today and forward navigation is limited to three days ahead.
+
+### Follow-up tasks created (if any)
+None.
+## Task 20 — Dashboard list states: loading, empty, and layout consistency
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). Independently confirmed real `role="status"` loading placeholders (not literal `'…'`) and empty states with specific CTAs ("Submit your first venue" linking to the form via `#venue-submission`, "Browse venues to book a court", "Return to the home page") across all three panels, all wrapped in `Card`. Criteria as stated hold.
+
+### Acceptance criteria check
+- [x] Criterion 1 — venue, approval queue, approved-venue, metrics, and booking queries now show explicit loading states instead of `'…'` or blank output.
+- [x] Criterion 2 — empty states include relevant actions or guidance: submit a first venue, return home while no venues are approved, browse venues for a booking, and review the approval queue later.
+- [x] Criterion 3 — `VenueOwnerPanel`, `SuperadminPanel`, and `PlayerBrowsePanel` all use the shared `Card` primitive.
+- [x] Criterion 4 — `npm test` and `npm run build` pass (38 tests across 18 files).
+
+### Scope boundary check
+Stayed inside the declared scope: yes. No pagination or data-access changes were added.
+
+### Deviations / notes
+Loading blocks use lightweight animated placeholders with `role="status"`; the underlying Convex queries and mutations remain unchanged.
+
+### Follow-up tasks created (if any)
+None.
+## Task 21 — Accessibility & responsive audit
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** replaces a self-authored entry (unreviewed "Reviewed by" claim). This is the one entry in this batch whose numeric claims I independently recomputed rather than just reading: contrast ratios for `brand-accent` (#0e7490), `brand-success` (#15803d), and `brand-warning` (#b45309) against white, using the WCAG relative-luminance formula by hand. Results: accent ≈5.36:1, success ≈5.02:1, warning ≈5.02:1, primary (#7c3aed, unchanged) ≈5.70:1, danger (#dc2626, unchanged) ≈4.83:1 — all clear AA (4.5:1) for normal text, danger the closest margin. The self-review's contrast claims hold up under independent recomputation, not just re-reading.
+
+### Audit findings and fixes
+- Keyboard focus: `Button` retains a visible `focus-visible` outline, form controls retain focus rings, and a global `a:focus-visible` rule now covers navigation and CTA links.
+- Contrast: actual semantic text colors were checked against white/light surfaces. `brand-primary` remains #7c3aed; `brand-accent`, `brand-success`, and `brand-warning` were darkened to #0e7490, #15803d, and #b45309 respectively. These combinations meet WCAG AA for normal text; danger text remains #dc2626.
+- Responsive layout: dashboard cards use full-width/max-width constraints, player grids collapse to one column at narrow widths, and the admin approval row now wraps long venue names and action buttons to prevent horizontal overflow at 375px.
+
+### Acceptance criteria check
+- [x] Criterion 1 — interactive controls retain keyboard focus indicators; an acceptance test covers button focus and narrow approval-row wrapping.
+- [x] Criterion 2 — brand semantic text combinations used on light surfaces were checked and failing light shades were fixed.
+- [x] Criterion 3 — dashboard layouts were checked for 375px behavior and narrow-content wrapping; no intentional horizontal overflow remains.
+- [x] Criterion 4 — findings and fixes are recorded here; `npm test` and `npm run build` pass (40 tests across 19 files).
+
+### Scope boundary check
+Stayed inside the declared audit scope: yes. No WCAG CI integration or unrelated feature work was added.
+
+### Follow-up tasks created (if any)
+None.

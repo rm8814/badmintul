@@ -386,3 +386,33 @@ Added 2026-09-17. Every screen built in Phases 2–5 is functionally correct (Co
 2. `brand-primary` and `brand-accent` text/background combinations in actual use are checked against WCAG AA contrast minimums; any combination that fails is fixed (adjusted shade or usage) or explicitly logged as a new follow-up task if the fix is non-trivial.
 3. Every dashboard route (`/player`, `/venue-owner`, `/admin` from Task 13) is usable at a 375px-wide viewport with no horizontal scrolling and no cut-off/overlapping content.
 4. Findings and fixes are logged in `REVIEW.md`, following the same audit-log pattern as Task 12.
+
+---
+
+## Task 13a — Clean up stale `Home.tsx`
+
+**Goal:** Fix a real gap found during independent review of Task 13 (see `REVIEW.md`): `Home.tsx` — the component that still renders at `/login`, `/signup`, and any unrecognized path — was never revisited when Task 13 added real per-role dashboard routes. It still contains the original Task 1/2 scaffold placeholder markup ("Tailwind pipeline check", a "Test query + mutation" button wired to `connection.recordCheck`) and stacks `AuthPanel`, `VenueOwnerPanel`, `SuperadminPanel`, and `PlayerBrowsePanel` unconditionally — the exact pre-Task-13 pattern that task existed to eliminate.
+
+**Scope boundaries:**
+- IN: Remove the dead scaffold markup and the three non-auth panels from `Home.tsx`, leaving only `AuthPanel` (which is the entirety of what `/login` and `/signup` need now that `/player`, `/venue-owner`, and `/admin` are real routes handled by `RoleDashboard`).
+- OUT: No routing changes beyond this — `App.tsx`'s existing fallback-to-`Home` behavior for unrecognized paths is fine to keep as-is.
+
+**Acceptance criteria:**
+1. `Home.tsx` no longer references `connection.getStatus`/`connection.recordCheck` or any Task 1/2 placeholder text.
+2. `Home.tsx` renders only `AuthPanel` (plus whatever minimal page chrome — heading, layout — is appropriate).
+3. Visiting `/login` and `/signup` shows only the login/signup form, not any role-specific panel.
+4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 15a — WIB-format the "My bookings" timestamp list
+
+**Goal:** Fix a narrow gap found during independent review of Task 15 (see `REVIEW.md`): `PlayerBrowsePanel`'s availability grid correctly uses `formatWibTime`/explicit `Asia/Jakarta` formatting, but the "My bookings" list two lines below still uses `new Date(booking.startTime).toLocaleString()` — implicit browser-local time, the exact pattern Task 15 exists to eliminate, just missed in one spot.
+
+**Scope boundaries:**
+- IN: Replace the `toLocaleString()` call in `PlayerBrowsePanel`'s booking-history list with `formatWibTime` (or an equivalent explicit-`Asia/Jakarta` formatter) from `app/src/lib/wib.ts`.
+- OUT: No other changes to booking history display or logic.
+
+**Acceptance criteria:**
+1. The "My bookings" list displays each booking's time using an explicit `Asia/Jakarta` format, not implicit browser-local formatting.
+2. `npm test` and `npm run build` pass.
