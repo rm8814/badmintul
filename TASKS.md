@@ -433,3 +433,74 @@ Added 2026-09-17. Every screen built in Phases 2–5 is functionally correct (Co
 1. `signOutAndReturnToLogin` awaits `signOut()` before calling `window.location.replace('/')`.
 2. The sign-out button shows a disabled "Signing out…" state while the call is in flight.
 3. `npm test` and `npm run build` pass.
+
+---
+
+# Phase 10 — Venue Owner Operations & Superadmin Moderation
+
+Added 2026-09-18. `SPEC.md` §1 lists these as in-scope v1 user stories, but no task in this file ever covered them — Task 5 built venue/court *creation* only, Task 6 explicitly deferred suspend/ban ("build it only if time allows after Task 12; do not block on it" — that condition is now met, all of Tasks 1–22 are done). This phase closes that gap. Unlike Phase 8/9, this is genuine unclaimed v1 scope, not debt from a prior task — treat these as first-class tasks with the same rigor as Tasks 1–8, not cleanup.
+
+**Ordering:** Task 23 first — it adds a new table and a new atomicity-sensitive mutation that Task 24's booking view and the availability display depend on being correct. Task 24 and 25 can happen in either order after that (both are owner-scoped read paths over existing + Task 23 data). Task 26 is independent of 23–25 and can happen anytime, but do it last so `RoleDashboard`'s role-check helpers only need touching once if Task 26's suspension check changes their shared shape.
+
+---
+
+## Task 23 — Court availability blocking (maintenance slots)
+
+**Goal:** A venue owner can block a court for a time range (e.g., maintenance), per `SPEC.md` §1's Venue Owner story: "manage court availability (block slots for maintenance)." A blocked slot must not be bookable by a player, and — symmetrically — a venue owner must not be able to block a slot a player has already confirmed a booking for.
+
+**Scope boundaries:**
+- IN: A new `courtBlocks` table (`courtId: v.id("courts")`, `startTime: v.number()`, `endTime: v.number()`, `reason: v.optional(v.string())`), indexed the same way `bookings` is (`by_court_and_start`). A `createCourtBlock` mutation, venue-owner-only and scoped to courts belonging to the caller's own venues (same ownership-check pattern as `venues.ts`'s `getMyVenue`), that rejects if the range overlaps an existing confirmed booking. A `removeCourtBlock` mutation with the same ownership check. **Critical:** `bookings.ts`'s existing `createBooking` mutation must be updated to also reject if the requested slot overlaps a `courtBlocks` row — this check must happen inside the same single mutation as the existing booking-conflict check (per `RISKS.md` R-4's discipline: check-and-write atomicity, no separate read-then-write). The player-facing availability display (`getCourtAvailability` or a companion query) must surface blocked slots distinctly from booked ones.
+- OUT: No recurring/repeating block patterns (e.g., "block every Tuesday") — single time-range blocks only, matching the project's existing single-slot-booking model (`SPEC.md` §3 non-goals: no recurring bookings, and this follows the same simplicity principle). No UI calendar-picker polish beyond what Task 19's grid pattern already provides — reuse that pattern for the owner-facing block view rather than building a new one.
+
+**Acceptance criteria:**
+1. A venue owner can block a time range on a court they own; a venue owner cannot block a court belonging to another owner's venue (server-side check, test this explicitly — same rigor as Task 5's R-8 test).
+2. Attempting to block a range that overlaps an existing confirmed booking is rejected server-side with a clear error.
+3. Attempting to book (`createBooking`) a range that overlaps an existing block is rejected server-side with a clear error — write an explicit test for this, since it's the same class of correctness bug R-4 exists to prevent, just with a new source of conflict.
+4. The player-facing availability view visually distinguishes blocked slots from booked slots (not just "unavailable" — a player shouldn't need to guess why).
+5. `npm test` and `npm run build` pass.
+
+---
+
+## Task 24 — Venue owner: bookings view
+
+**Goal:** A venue owner can see who has booked their courts, per `SPEC.md` §1: "view incoming bookings."
+
+**Scope boundaries:**
+- IN: A query (e.g., `bookings.listBookingsForMyVenues` or similar in `convex/bookings.ts`) that returns bookings for every court belonging to venues the caller owns — scoped server-side the same way `venues.listMyVenues` is, never trusting a client-supplied venue/court id. Venue owner UI (extend `VenueOwnerPanel.tsx`, reusing Task 17's `Card`/loading/empty-state patterns from Task 20) listing bookings with court name, time, and status.
+- OUT: No booking modification/cancellation from the owner side — that stays a player-only action per Task 8's existing scope. No filtering/search UI beyond a basic per-venue grouping if trivial.
+
+**Acceptance criteria:**
+1. A venue owner sees bookings only for their own venues' courts — verify with a negative test (owner B's bookings do not appear for owner A, same rigor as Task 5's R-8 test).
+2. The query does not expose booking data for venues the caller doesn't own even if a court/venue ID is guessed and passed directly (server-side check, not just "the UI doesn't ask for it").
+3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 25 — Venue owner: revenue/utilization stats
+
+**Goal:** A venue owner can see basic revenue and utilization numbers for their venue(s), per `SPEC.md` §1: "see basic revenue/utilization stats for their venue(s)."
+
+**Scope boundaries:**
+- IN: A query aggregating, per venue owned by the caller: total confirmed-booking revenue (sum of `court.pricePerHour` for each confirmed booking on that court — bookings are currently always 1 hour per `bookings.ts`'s `createBooking`, so this is a straightforward sum, not a duration calculation), and a simple utilization figure (e.g., booked hours vs. total open hours in a recent window). Straightforward Convex aggregation queries, no charting library — same constraint Task 6 used for the superadmin metrics view, per `SPEC.md` §3's non-goal on analytics/BI dashboards.
+- OUT: No date-range picker or historical trend charts — a current/recent-window snapshot is sufficient for v1, consistent with `SPEC.md` §3's explicit "no exportable reports" non-goal.
+
+**Acceptance criteria:**
+1. A venue owner sees revenue and utilization numbers computed from real Convex queries (not hardcoded), scoped to only their own venues.
+2. Numbers are verified against a small seeded/test dataset with a known expected total (e.g., 3 confirmed bookings at a known price → assert the exact revenue figure), not just "a number renders."
+3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 26 — Superadmin: suspend a venue or user
+
+**Goal:** A superadmin can suspend a venue or a user, per `SPEC.md` §1: "Suspend a venue or user." This is a moderation action, not a deletion — a suspended venue/user's data stays intact but becomes inactive.
+
+**Scope boundaries:**
+- IN: A `suspended: v.boolean()` field added to both `venues` and `users` (default `false` for existing rows — Convex requires a schema migration path for this; use `v.optional(v.boolean())` if a backfill mutation isn't written, and treat `undefined` as `false` everywhere it's read). A `setVenueSuspended`/`setUserSuspended` mutation pair in `convex/admin.ts`, superadmin-only. **Enforcement, not just a flag:** a suspended venue must be excluded from `venues.listApprovedVenues` (players shouldn't see it) even if its `approvalStatus` is `"approved"`. A suspended user must be rejected by the shared role-check helpers (`requirePlayer`, `requireVenueOwner`, `requireSuperadmin` — currently duplicated per-file per `convex/venues.ts`, `bookings.ts`, `admin.ts`, `roles.ts`; check `user.suspended` in each, or consolidate into one shared helper as part of this task if that's cleaner — flag the consolidation choice in `REVIEW.md` either way) so a suspended user's existing session can't keep acting even though their auth token is still valid.
+- OUT: No suspension-reason UI/audit log beyond what's needed to know something is suspended — a simple boolean is sufficient for v1. No un-suspend workflow beyond the same mutation toggling the flag back (no separate "appeal" flow).
+
+**Acceptance criteria:**
+1. A superadmin can suspend and un-suspend a venue; a suspended venue does not appear in `listApprovedVenues` even when approved — verify with a test that creates an approved venue, suspends it, and confirms it disappears from the player-facing query.
+2. A superadmin can suspend and un-suspend a user; a suspended user's calls to role-scoped functions are rejected server-side (test this the same way Task 4/8's role-rejection tests work — call a function as a suspended user's identity and assert rejection), even though nothing about their Convex Auth token changed.
+3. A non-superadmin cannot suspend anything (existing `requireSuperadmin` check covers this — verify it wasn't bypassed).
+4. `npm test` and `npm run build` pass.
