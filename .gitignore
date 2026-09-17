@@ -1,0 +1,10 @@
+# All build/dependency artifacts live under app/ — see app/.gitignore for details.
+# This root file only guards against anything accidentally dropped at repo root.
+app/node_modules
+app/dist
+*.log
+.DS_Store
+
+# Old development kept as local reference only — has its own separate git history,
+# not part of this repo. Not a submodule; intentionally excluded from tracking.
+/badmintul/

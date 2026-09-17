@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Design tokens per SPEC.md §2 — electric violet + cyan, light background default. */
+@theme {
+  --color-brand-primary: #7c3aed;
+  --color-brand-accent: #06b6d4;
+  --color-brand-bg: #fafafa;
+  --color-brand-success: #16a34a;
+  --color-brand-warning: #d97706;
+  --color-brand-danger: #dc2626;
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+  @apply bg-brand-bg font-sans text-neutral-900;
+}
+
+h1, h2, h3, strong {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
