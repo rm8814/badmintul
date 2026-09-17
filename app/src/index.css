@@ -3,10 +3,10 @@
 /* Design tokens per SPEC.md §2 — electric violet + cyan, light background default. */
 @theme {
   --color-brand-primary: #7c3aed;
-  --color-brand-accent: #06b6d4;
+  --color-brand-accent: #0e7490;
   --color-brand-bg: #fafafa;
-  --color-brand-success: #16a34a;
-  --color-brand-warning: #d97706;
+  --color-brand-success: #15803d;
+  --color-brand-warning: #b45309;
   --color-brand-danger: #dc2626;
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Plus Jakarta Sans', sans-serif;
@@ -18,4 +18,9 @@ body {
 
 h1, h2, h3, strong {
   font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-brand-accent);
+  outline-offset: 3px;
 }

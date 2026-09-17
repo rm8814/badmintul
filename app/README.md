@@ -30,3 +30,21 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Superadmin bootstrap
+
+Create the user through the normal `/signup` flow first, then promote that existing account with deploy-level Convex access. This operation is an `internalMutation`; it is not reachable from the browser client and there is no public “become superadmin” path.
+
+From `app/`, use the development deployment:
+
+```powershell
+npx convex run --dev admin:promoteUserToSuperadmin '{"email":"admin@example.com"}'
+```
+
+Use the production deployment only when the account exists there:
+
+```powershell
+npx convex run --prod admin:promoteUserToSuperadmin '{"email":"admin@example.com"}'
+```
+
+The email lookup is case-insensitive. The command fails if no matching user exists. Treat deploy access as sensitive because this operation changes a user’s role.

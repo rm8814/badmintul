@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
@@ -46,5 +46,18 @@ export const getMetrics = query({
       bookings: bookings.length,
       players: players.length,
     };
+  },
+});
+
+/** CLI-only bootstrap operation; this is intentionally not a public mutation. */
+export const promoteUserToSuperadmin = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    if (!email) throw new Error("Email is required");
+    const user = (await ctx.db.query("users").collect()).find((candidate) => candidate.email.toLowerCase() === email);
+    if (!user) throw new Error(`No user found for ${email}`);
+    await ctx.db.patch(user._id, { role: "superadmin" });
+    return user._id;
   },
 });

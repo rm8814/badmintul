@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useConvexAuth } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
+import Button from './ui/Button'
+import Card from './ui/Card'
+import TextField from './ui/TextField'
 
 export default function VenueOwnerPanel() {
   const { isAuthenticated } = useConvexAuth()
@@ -14,6 +17,7 @@ export default function VenueOwnerPanel() {
   const [price, setPrice] = useState('100000')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!isAuthenticated || user?.role !== 'venueOwner') return null
 
@@ -21,6 +25,7 @@ export default function VenueOwnerPanel() {
     event.preventDefault()
     setError('')
     setSaved(false)
+    setIsSubmitting(true)
     try {
       await createVenue({ name, address, description: '', photos: [], courts: [{ name: courtName, pricePerHour: Number(price), operatingHours: { open: '08:00', close: '22:00' } }] })
       setSaved(true)
@@ -28,20 +33,22 @@ export default function VenueOwnerPanel() {
       setAddress('')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not submit venue')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  return <section className="w-full max-w-xl rounded-xl border border-brand-primary/20 bg-white p-6 text-left shadow-sm">
+  return <Card className="w-full max-w-xl border-brand-primary/20 text-left">
     <h2 className="text-xl font-semibold text-brand-primary">Venue owner dashboard</h2>
-    <form className="mt-4 flex flex-col gap-3" onSubmit={submit}>
-      <input required placeholder="Venue name" value={name} onChange={(event) => setName(event.target.value)} />
-      <input required placeholder="Address" value={address} onChange={(event) => setAddress(event.target.value)} />
-      <input required placeholder="First court name" value={courtName} onChange={(event) => setCourtName(event.target.value)} />
-      <input required min="1" type="number" placeholder="Price per hour" value={price} onChange={(event) => setPrice(event.target.value)} />
+    <form id="venue-submission" className="mt-4 flex flex-col gap-3" onSubmit={submit}>
+      <TextField id="venue-name" label="Venue name" required value={name} onChange={(event) => setName(event.target.value)} />
+      <TextField id="venue-address" label="Address" required value={address} onChange={(event) => setAddress(event.target.value)} />
+      <TextField id="court-name" label="First court name" required value={courtName} onChange={(event) => setCourtName(event.target.value)} />
+      <TextField id="court-price" label="Price per hour" required min="1" type="number" value={price} onChange={(event) => setPrice(event.target.value)} />
       {error && <p className="text-sm text-brand-danger">{error}</p>}
       {saved && <p className="text-sm text-brand-success">Venue submitted for approval.</p>}
-      <button className="rounded-lg bg-brand-primary px-4 py-2 font-semibold text-white" type="submit">Submit venue</button>
+      <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting…' : 'Submit venue'}</Button>
     </form>
-    <div className="mt-6"><h3 className="font-semibold">My venues</h3>{venues?.length ? venues.map((venue) => <p className="mt-2" key={venue._id}>{venue.name} — <span className="text-brand-warning">{venue.approvalStatus === 'pending' ? 'Pending approval' : venue.approvalStatus}</span></p>) : <p className="mt-2 text-neutral-600">No venues submitted yet.</p>}</div>
-  </section>
+    <div className="mt-6"><h3 className="font-semibold">My venues</h3>{venues === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading your venues…</div> : venues.length ? venues.map((venue) => <p className="mt-2" key={venue._id}>{venue.name} — <span className="text-brand-warning">{venue.approvalStatus === 'pending' ? 'Pending approval' : venue.approvalStatus}</span></p>) : <div className="mt-2 rounded-lg border border-dashed border-neutral-300 p-4"><p className="text-neutral-600">No venues submitted yet.</p><a className="mt-2 inline-block font-semibold text-brand-primary underline" href="#venue-submission">Submit your first venue</a></div>}</div>
+  </Card>
 }
