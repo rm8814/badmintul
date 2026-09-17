@@ -635,3 +635,36 @@ None.
 
 ### Follow-up tasks created
 None.
+
+## Task 22 — Fix stuck sign-out on a stale authenticated session
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex (initial attempt, uncommitted and not logged as a task) + Claude Code (correction)
+**Reviewed by:** Claude Code
+
+**Context:** The user reported this bug directly: while trying to log in as a newly-promoted superadmin, they kept landing on `/login`, which showed only a "Sign out" button that didn't appear to do anything when clicked. They asked Codex to fix it directly; Codex left an uncommitted change rather than logging a task, which is what triggered this review.
+
+### What Codex's first attempt got wrong
+The uncommitted diff changed `onClick={() => void signOut()}` to a new `signOutAndReturnToLogin()` that called `void signOut().catch(() => undefined)` **without awaiting it**, immediately followed by `window.location.replace('/')`. Reading `@convex-dev/auth`'s actual implementation (`node_modules/@convex-dev/auth/dist/react/client.js:164-174`) shows `signOut()` awaits a server round-trip (`client.authenticatedCall("auth:signOut")`) *before* erasing the local token. A full-page navigation (`window.location.replace`) typically aborts in-flight requests. So firing `signOut()` and navigating away in the same tick, without waiting, risks the sign-out network call being aborted before the local token is ever cleared — meaning the fix could make the "stuck" bug intermittently worse (a session that looks signed out but isn't) rather than fixing it. This was not caught by Codex's own test (`signout.test.ts`), which only string-matched that `void signOut().catch` and the redirect were present — it asserted the buggy pattern's existence, not its correctness.
+
+### Fix applied (by Claude Code, in `AuthPanel.tsx`)
+- `signOutAndReturnToLogin` is now `async` and does `await signOut()` (wrapped in try/catch, matching the library's own error-swallowing behavior) **before** calling `window.location.replace('/')` — the local token is guaranteed cleared before navigation.
+- Added an `isSigningOut` state that disables the button and shows "Signing out…" while in flight, matching the loading-state pattern used everywhere else in the app (Task 18).
+- Updated `signout.test.ts` to assert the awaited pattern (`async function signOutAndReturnToLogin()`, `await signOut()`, explicitly asserting `void signOut()` is *absent*) and the new pending-state behavior.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified by reading the final `AuthPanel.tsx`: `await signOut()` runs to completion before `window.location.replace('/')`.
+- [x] Criterion 2 — verified: button is `disabled={isSigningOut}` and shows "Signing out…" during the call.
+- [x] Criterion 3 — `npm test` (44/44 across 22 files) and `npm run build` both pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — only `AuthPanel.tsx` and its test changed.
+- Out-of-scope work done anyway: none. Did not attempt to diagnose *why* a stale/mismatched-role session can be reached in the first place (a Convex Auth session-lifecycle question) — flagged below as worth watching, not fixed here.
+
+### Deviations / notes
+This does not fully close the loop on root cause: it's still not confirmed *why* the user had an authenticated-but-wrong-role session in the browser in the first place (most likely: they signed up/logged in before running the superadmin promotion, and the old session persisted). The fix makes sign-out actually reliable, which is the direct unblock the user needed, but if stale sessions showing the wrong dashboard keep recurring, that's worth a dedicated investigation rather than repeated sign-out patches.
+
+Process note: Codex worked on this without logging a task in `TASKS.md` first, and left it uncommitted rather than flagging it — caught here only because the user mentioned asking for it. Worth reinforcing the existing process (log a task, or at minimum flag it) for direct bug-fix requests, not just planned `TASKS.md` work.
+
+### Follow-up tasks created
+- **Advisory, not blocking:** if a user reports landing on a dashboard/login route with an unexpectedly stale role again, investigate whether Convex Auth sessions need an explicit invalidation step after a superadmin promotion (Task 14's `promoteUserToSuperadmin`), rather than relying on the promoted user to notice and sign out themselves.

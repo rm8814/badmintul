@@ -18,6 +18,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated || !user) return
@@ -25,7 +26,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
     window.location.replace(route)
   }, [isAuthenticated, user])
 
-  if (isAuthenticated) return <Button variant="secondary" onClick={() => void signOut()}>Sign out</Button>
+  if (isAuthenticated) return <Button variant="secondary" disabled={isSigningOut} onClick={() => void signOutAndReturnToLogin()}>{isSigningOut ? 'Signing out…' : 'Sign out'}</Button>
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -38,6 +39,17 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  async function signOutAndReturnToLogin() {
+    setIsSigningOut(true)
+    try {
+      await signOut()
+    } catch {
+      // Ignore: the local session is treated as ended either way, matching
+      // the library's own signOut() behavior of swallowing server errors.
+    }
+    window.location.replace('/')
   }
 
   return <form className="flex w-full max-w-sm flex-col gap-4 text-left" onSubmit={submit}>

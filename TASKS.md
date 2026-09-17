@@ -416,3 +416,20 @@ Added 2026-09-17. Every screen built in Phases 2–5 is functionally correct (Co
 **Acceptance criteria:**
 1. The "My bookings" list displays each booking's time using an explicit `Asia/Jakarta` format, not implicit browser-local formatting.
 2. `npm test` and `npm run build` pass.
+
+---
+
+## Task 22 — Fix stuck sign-out on a stale authenticated session (DONE 2026-09-18)
+
+**Goal:** Fix a real bug the user hit directly: navigating to `/login` while already authenticated with a stale/mismatched-role session showed only a "Sign out" button that appeared to do nothing when clicked, blocking them from logging back in as a freshly-promoted superadmin account.
+
+**Context:** Codex made a first attempt at this (uncommitted, not logged as a task) that called `signOut()` fire-and-forget (`void signOut().catch(...)`) immediately followed by `window.location.replace('/')`. On review, this was found to likely make the underlying bug *worse*, not better: `@convex-dev/auth`'s `signOut()` awaits a server call before erasing the local token (`node_modules/@convex-dev/auth/dist/react/client.js`), and a full-page navigation typically aborts in-flight requests — so navigating away before `signOut()` resolves risks the local session token never actually being cleared, silently.
+
+**Scope boundaries:**
+- IN: `AuthPanel.tsx`'s sign-out path now `await`s `signOut()` before navigating, with a disabled/pending state (`isSigningOut`, "Signing out…") consistent with every other mutation-backed control in the app (Task 18's pattern).
+- OUT: No change to the underlying reason a stale/mismatched session can be reached in the first place — that's a Convex Auth session-lifecycle question, not something this fix attempts to solve.
+
+**Acceptance criteria (all met, see `REVIEW.md`):**
+1. `signOutAndReturnToLogin` awaits `signOut()` before calling `window.location.replace('/')`.
+2. The sign-out button shows a disabled "Signing out…" state while the call is in flight.
+3. `npm test` and `npm run build` pass.
