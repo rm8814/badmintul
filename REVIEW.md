@@ -821,3 +821,120 @@ This is the single most consequential finding of the whole project so far: every
 
 ### Follow-up tasks created
 - Carried in `TASKS.md` Task 27's own text: verify/fix the same issue on production before trusting Task 11/12a, and consider adding a test that exercises real token issuance (not `withIdentity()`).
+## Task 27 follow-up — Verify/fix production auth
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly left the unverifiable criterion unchecked rather than claiming it was done — good practice. Independently re-verified the three checked criteria directly against production, not just by re-reading the report.
+
+### Acceptance criteria check
+- [x] Production `SITE_URL` is set to `https://badmintul.com` — confirmed via `npx convex env get SITE_URL --prod`.
+- [x] Production `JWKS`/`JWT_PRIVATE_KEY` are a matched pair — confirmed two ways: `npx convex env get JWKS --prod` returns a key, and independently `curl https://frugal-vole-549.convex.site/.well-known/jwks.json` returns the **exact same key material live over HTTPS**, proving the discovery endpoint is actually serving it, not just that the env var exists.
+- [x] `convex/http.ts` deployed to `frugal-vole-549` — confirmed by the above: the endpoint wouldn't exist at all without it being deployed.
+- [ ] Real browser sign-in against production — correctly still unverified, blocked on Hostinger as stated. I did not attempt to work around this (e.g., by pointing a local build at the prod Convex URL) since the task didn't ask for it and Hostinger access is the actual gating dependency for a true end-to-end check.
+- [x] `npm test`/`npm run build` pass, re-confirmed in this review (60/60 across 31 files, after Tasks 28–31 landed on top of this).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — deployment/env config only, no code changes in this piece.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+This closes the config-level risk from Task 27 for production. The one remaining gap (real browser sign-in against `badmintul.com`) is a Hostinger-access blocker, not a code or config gap — consistent with every other Hostinger-dependent item already tracked in `ROADMAP.md`.
+
+### Follow-up tasks created
+None new — the live-verification gap is already tracked as part of Task 11/12a's Hostinger dependency.
+## Task 28 — Persistent app shell for authenticated routes
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified live in a real browser (not just by reading code) — this was the priority fix for the confirmed dead end from dogfooding, so it got the most scrutiny in this batch. Criteria 1–5 as stated are true, but live testing surfaced one real, reproducible bug not covered by the source-string test.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: signed in as `demo@example.com`, landed on `/admin`, and a "Sign out" button was visible and clickable in the header at all times — a complete reversal of the pre-Task-28 state where `read_page` on `/admin` returned zero interactive elements.
+- [x] Criterion 2 — verified live: header showed a "Superadmin" badge.
+- [x] Criterion 3 — verified in code: `href={roleRoutes[role]}` on the wordmark.
+- [x] Criterion 4 — verified in code: `RoleDashboard.tsx`'s suspended branch wraps its message in `<AppShell role={role}>`, so sign-out stays reachable.
+- [x] Criterion 5 — `npm test` (60/60, re-run) and `npm run build` pass.
+
+**Bug found in live testing (not caught by `app-shell.test.ts`, which only string-matches source):** clicking Sign out lands on `/login`, not `/` as `AppShell.tsx`'s `signOutAndReturnHome` intends. Root cause: `RoleDashboard.tsx` has its own effect watching `isAuthenticated` that fires `window.location.replace('/login')` whenever it goes false — including the moment `signOut()` itself causes that transition, since `RoleDashboard` is still mounted around `AppShell` at that instant. This races against `AppShell`'s own explicit `window.location.replace('/')` after the same `signOut()` call resolves. In live testing, `RoleDashboard`'s redirect won and the browser ended up at `/login`. Not a dead end (the user can still log back in from there) and not a crash, but it's a real, reproducible deviation from the intended destination, and confusing: the last action was "Sign out," and landing back on a login form reads as if sign-out failed even though it didn't.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — single new component, no sidebar/notifications added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the race condition above.
+
+### Follow-up tasks created
+- **Task 28a (new, appended to `TASKS.md`):** Fix the sign-out destination race. Recommended approach: don't rely on two independent components each calling `window.location.replace` off the same auth-state transition — either have `AppShell` navigate first and have `RoleDashboard`'s effect check a flag/skip redirecting during an in-progress sign-out, or centralize post-sign-out navigation in one place only.
+## Task 29 — Branded, clearer auth screens
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live in a real browser — this is the single biggest visual improvement in the whole project: `/login` went from a bare unstyled form floating in empty gray space to a properly branded page.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: `/login` shows a "badmintul." wordmark and a working "Kembali ke beranda" link back to `/`.
+- [x] Criterion 2 — verified live: on `/login`, "Log in" renders filled/primary while "Sign up" renders outlined/secondary — immediately obvious which tab is active, a real fix over the prior identical-looking tabs.
+- [x] Criterion 3 — verified live: the form sits in a sensible content area below the header, not centered alone in a mostly-empty viewport.
+- [x] Criterion 4 — `npm test` (60/60, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. Only auth-screen chrome and tab presentation changed; fields and auth calls were untouched.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+none.
+
+### Follow-up tasks created (if any)
+None.
+## Task 30 — Post-login/post-logout transition feedback
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified in code and live: `AuthPanel.tsx` checks `isRedirecting` *before* the `isAuthenticated` "Sign out" branch, so the confusing flash I originally found (login succeeds → briefly shows an unrelated "Sign out" button → then the dashboard) is genuinely fixed, not just reordered cosmetically.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `submit()` calls `setIsRedirecting(true)` immediately after a successful `signIn()`, and the `isRedirecting` render branch is checked ahead of the `isAuthenticated` branch, so "Redirecting to your dashboard…" is what's shown, not the old "Sign out" flash.
+- [x] Criterion 2 — verified: `AppShell`'s `isSigningOut` is set before `await signOut()` and only used to control the button label/disabled state, which remains rendered until the subsequent `window.location.replace` actually navigates away.
+- [x] Criterion 3 — `npm test` (60/60, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. Only copy/state feedback was added; no router or transition animation was introduced.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+none.
+
+### Follow-up tasks created (if any)
+None.
+## Task 31 — Dashboard layout pass
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live and via `git diff --stat app/convex/`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: `/admin` now shows dashboard content flowing naturally below the header at a sensible width, not a small floating card centered in an empty page.
+- [x] Criterion 2 — verified: `git diff --stat app/convex/` for this whole batch (Task 27 follow-up through 31) shows zero file changes — only deployment env vars were touched for Task 27, which is expected and outside this criterion's scope.
+- [x] Criterion 3 — `npm test` (60/60, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. The change is limited to the `RoleDashboard` outer layout and its acceptance test.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The shell and suspended-user gate remain shared wrappers; panel internals were left unchanged.
+
+### Follow-up tasks created (if any)
+None.

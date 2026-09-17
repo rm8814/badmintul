@@ -624,3 +624,20 @@ Added 2026-09-18, after dogfooding the app live in a browser for the first time 
 1. Dashboard content no longer reads as a small floating card in an otherwise-empty page — it uses the viewport width appropriately at both desktop and the 375px mobile width already required by Task 21's audit.
 2. No existing panel content, queries, or mutations are touched — verify via `git diff --stat app/convex/` showing zero changes.
 3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 28a — Fix sign-out landing on `/login` instead of `/`
+
+**Goal:** Fix a real, reproducible bug found during independent review of Task 28 (see `REVIEW.md`): clicking Sign out from `AppShell` lands on `/login`, not `/` as `signOutAndReturnHome` intends.
+
+**Root cause:** `RoleDashboard.tsx` has its own effect watching `isAuthenticated` that fires `window.location.replace('/login')` whenever it goes false — including the moment `signOut()` itself causes that transition, since `RoleDashboard` is still mounted around `AppShell` at that instant. This races against `AppShell`'s own explicit `window.location.replace('/')` called right after the same `signOut()` resolves. In live testing, `RoleDashboard`'s redirect won.
+
+**Scope boundaries:**
+- IN: Make the sign-out destination deterministic. Recommended approach: don't rely on two independent components each calling `window.location.replace` off the same auth-state transition — either have `RoleDashboard`'s effect skip its own redirect while a sign-out initiated by `AppShell` is in progress (e.g., a shared "signing out" flag), or centralize post-sign-out navigation so only one place ever calls `window.location.replace` after `signOut()`.
+- OUT: No change to the destination itself (still `/`, per Task 28's original intent) — this task fixes *which code path* controls the navigation, not where it goes.
+
+**Acceptance criteria:**
+1. Clicking Sign out from any dashboard route reliably lands on `/`, not `/login`, verified by repeating the sign-out flow multiple times (a race condition may not reproduce every single time — confirm it's actually fixed, not just working once).
+2. The role-mismatch and unauthenticated-visitor redirects in `RoleDashboard.tsx` (unrelated to sign-out) continue to work unchanged.
+3. `npm test` and `npm run build` pass.
