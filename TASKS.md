@@ -299,3 +299,90 @@ Added 2026-09-17 after independent review of Tasks 1–12a surfaced four real ga
 1. `DEPLOY.md` (or the equivalent `app/README.md` section) exists with a numbered runbook covering build, upload target/method, and CORS/allowed-origins steps.
 2. The Convex CORS/allowed-origins requirement for `https://badmintul.com` is documented with the exact dashboard location or CLI command to set it (per `RISKS.md` R-7).
 3. The runbook includes an explicit pre-flight check (e.g., a `grep` command) to confirm the built `app/dist` bundle references the production Convex URL, not the dev one, before upload.
+
+---
+
+# Phase 9 — UI/UX Polish
+
+Added 2026-09-17. Every screen built in Phases 2–5 is functionally correct (Convex-side logic and role checks are solid per `REVIEW.md`) but was built with minimal, inconsistent styling — this phase closes that gap. Concrete, verified-by-reading-the-code problems motivating this phase: `AuthPanel.tsx` and `VenueOwnerPanel.tsx` have multiple `<input>`/`<select>` elements with **no Tailwind classes at all** (unstyled browser-default fields sitting inside an otherwise branded violet/cyan app); every form uses `placeholder` text as its only label, with no `<label>`/`htmlFor` association (an accessibility gap, not just a visual one); no form anywhere disables its submit button or shows a pending state during the `await` on a mutation, so a slow network invites double-submits; `PlayerBrowsePanel`'s "availability calendar" (per `SPEC.md` §1/§4.1) is a bare vertical list of 14 hour rows, not a grid; and list views (approval queue, "my venues", "my bookings") show a raw `'…'`/nothing while `useQuery` is loading rather than a real loading state, and a plain one-line message with no call-to-action when empty.
+
+**Ordering:** Task 17 first (shared primitives everything else reuses) — doing 18–20 before 17 would mean re-touching every form and list a second time once primitives exist. 18, 19, and 20 can happen in any order relative to each other once 17 lands. Task 21 (accessibility/responsive audit) goes last since it needs to audit the *result* of 17–20, not the pre-polish state. This phase can run independently of Phase 8, but Task 20 (dashboard layout) will be cleaner to do after Phase 8's Task 13 (real dashboard routes) lands, since it's touching the same panels — check with the human/Claude Code reviewer before starting Task 20 if Task 13 isn't done yet, rather than guessing which order is less disruptive.
+
+---
+
+## Task 17 — Shared UI primitives (Button, Input, Select, FormField, Card)
+
+**Goal:** Replace one-off, inconsistent (and in several cases entirely unstyled) form controls and buttons with a small set of shared, reusable components so every screen looks and behaves consistently.
+
+**Scope boundaries:**
+- IN: `app/src/components/ui/` (or similar) with a `Button` (primary/secondary/danger variants, using the existing `brand-*` tokens from `app/src/index.css`), a labeled `TextField`/`FormField` wrapper (real `<label htmlFor>`, not placeholder-as-label), a styled `Select`, and a `Card` container for panel sections. Replace the unstyled `<input>`/`<select>` elements in `AuthPanel.tsx`, `VenueOwnerPanel.tsx`, and `PlayerBrowsePanel.tsx` with these.
+- OUT: No new design tokens (reuse `brand-primary`/`brand-accent`/etc. from `SPEC.md` §2, already defined). No component library dependency (shadcn/Radix/etc.) — plain Tailwind + React is sufficient at this scale and avoids adding a new external dependency for ~5 components.
+
+**Acceptance criteria:**
+1. Every `<input>` and `<select>` in `AuthPanel.tsx`, `VenueOwnerPanel.tsx`, and `PlayerBrowsePanel.tsx` has visible border/padding/focus styling consistent with the rest of the app — verify by loading each form and confirming no unstyled/browser-default fields remain.
+2. Every form field has a real `<label>` associated via `htmlFor`/`id`, not a placeholder standing in as the only label.
+3. `Button` supports a `disabled` state with a visibly different (not just non-functional) appearance.
+4. `npm test` and `npm run build` pass; no behavioral change to any Convex call — this task is presentation-only.
+
+---
+
+## Task 18 — Form submission states (loading, disabled, inline errors)
+
+**Goal:** Prevent double-submission and give the user feedback while a mutation is in flight, using the `Button`/`FormField` primitives from Task 17.
+
+**Scope boundaries:**
+- IN: Every form that calls a Convex mutation (`AuthPanel`'s sign in/up, `VenueOwnerPanel`'s venue submission, `SuperadminPanel`'s approve/reject, `PlayerBrowsePanel`'s booking) disables its submit control and shows a pending indicator (e.g., "Submitting…") for the duration of the `await`. Existing error message rendering (already present in `AuthPanel`/`VenueOwnerPanel`) is restyled via `FormField`'s error slot rather than rewritten from scratch.
+- OUT: No optimistic UI / client-side prediction of mutation results — Convex's reactive queries already update the UI once the mutation resolves, which is sufficient; don't add complexity here.
+
+**Acceptance criteria:**
+1. Clicking a submit/approve/reject/book control while its mutation is pending does not allow a second click to fire a second mutation (verify by simulating a slow network or asserting the control's `disabled` state is true during the `await` in a test).
+2. Each of the four forms/actions listed above shows a visible pending state distinct from its resting state.
+3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 19 — Booking availability: real calendar/grid layout
+
+**Goal:** Upgrade `PlayerBrowsePanel`'s availability view from a bare vertical list of hour rows to the "live availability calendar" `SPEC.md` §1 and §4.1 actually describe, and add basic date navigation (today/tomorrow at minimum — Task 7 deliberately deferred this).
+
+**Scope boundaries:**
+- IN: A grid/calendar-style layout for the selected court's hourly slots (using the `brand-success`/`brand-danger` tokens already used for open/booked states), plus the ability to move the viewed date forward/back by a day (at least today and the next few days — no full month view required). Keep using the existing `getCourtAvailability` query and `Asia/Jakarta`-explicit time handling from Task 15 (Phase 8) if that's landed by the time this task starts; if not, flag it rather than reintroducing the browser-local-time bug Task 15 exists to fix.
+- OUT: No multi-court side-by-side comparison view. No week/month calendar view — SPEC.md doesn't require it and it's a meaningfully bigger feature than this task's scope.
+
+**Acceptance criteria:**
+1. The availability view is a grid layout (not a plain vertical list), with visually distinct open vs. booked cells using the existing semantic color tokens.
+2. A player can navigate to at least the next few days' availability for a selected court, not only "today."
+3. Booking a slot still goes through the same `bookings:createBooking` mutation with no change to its double-booking-prevention logic (per `RISKS.md` R-4) — this task must not touch `convex/bookings.ts`.
+4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 20 — Dashboard list states: loading, empty, and layout consistency
+
+**Goal:** Replace the current `'…'`-while-loading / bare-one-line-when-empty pattern across the approval queue, "my venues," and "my bookings" lists with real loading and empty states, and make each panel's layout consistent (spacing, card structure) using Task 17's `Card` primitive.
+
+**Scope boundaries:**
+- IN: A loading state (skeleton or spinner, not literal `'…'` text) while each `useQuery` is `undefined`; an empty state with a short message *and* a relevant call-to-action (e.g., "No venues yet — submit your first venue" linking to the submission form, "No pending venues" for the approval queue, "No bookings yet — browse venues" for a player) instead of a bare sentence; consistent `Card`-based layout across `VenueOwnerPanel`, `SuperadminPanel`, `PlayerBrowsePanel`.
+- OUT: No pagination — list sizes are small enough at this stage that it's not warranted; add it later if real usage shows otherwise. Do this task after Phase 8's Task 13 (real dashboard routes) if that's landed, since both touch the same panel files — check current state before starting rather than assuming ordering.
+
+**Acceptance criteria:**
+1. Each of the three list views shows a distinguishable loading state, not literal `'…'` or blank output, while its query is pending.
+2. Each list's empty state includes a specific call-to-action relevant to that role, not just a generic "nothing here."
+3. All three panels use the shared `Card` primitive from Task 17 for consistent visual structure.
+4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 21 — Accessibility & responsive audit
+
+**Goal:** Verify the results of Tasks 17–20 (and the existing Landing page) actually work for keyboard users, screen readers, and mobile viewports — this is a verification task, not a build task, matching `TASKS.md`'s existing pattern for Task 12's audit-style scope.
+
+**Scope boundaries:**
+- IN: Keyboard-only navigation check (tab order, visible focus states — confirm `Button`/`FormField` from Task 17 don't suppress `:focus-visible` outlines) across all authenticated dashboard routes from Phase 8's Task 13; color-contrast check for `brand-primary`/`brand-accent` text against their backgrounds (WCAG AA, since SPEC.md's violet/cyan-on-light palette needs a contrast check, not an assumption); mobile-viewport (~375px width) usability check for every dashboard panel, not just the landing page (which Task 9 already covers).
+- OUT: No full WCAG audit tooling/CI integration — a documented manual pass is sufficient for v1, per the project's overall bias toward correctness-over-process-heaviness (`SPEC.md` §5). Fix anything found as part of this task rather than only cataloging it, consistent with how Task 9a handled Task 9's finding — but if a fix is large enough to be its own task, stop and log it as a new task rather than silently expanding this one's scope, per Task 12's established pattern.
+
+**Acceptance criteria:**
+1. Every interactive control (form fields, buttons, links) is reachable and operable via keyboard alone, with a visible focus indicator at each stop.
+2. `brand-primary` and `brand-accent` text/background combinations in actual use are checked against WCAG AA contrast minimums; any combination that fails is fixed (adjusted shade or usage) or explicitly logged as a new follow-up task if the fix is non-trivial.
+3. Every dashboard route (`/player`, `/venue-owner`, `/admin` from Task 13) is usable at a 375px-wide viewport with no horizontal scrolling and no cut-off/overlapping content.
+4. Findings and fixes are logged in `REVIEW.md`, following the same audit-log pattern as Task 12.
