@@ -6,6 +6,6 @@ describe('Task 26a suspended dashboard gate', () => {
   it('renders the suspension message before dashboard children', () => {
     expect(source).toContain('user.suspended === true')
     expect(source).toContain('Your account has been suspended')
-    expect(source.indexOf('user.suspended === true')).toBeLessThan(source.indexOf('return <main className="min-h-screen'))
+    expect(source.indexOf('user.suspended === true')).toBeLessThan(source.indexOf('return <AppShell role={role}><main'))
   })
 })

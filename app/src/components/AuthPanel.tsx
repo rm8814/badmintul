@@ -19,6 +19,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated || !user) return
@@ -26,6 +27,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
     window.location.replace(route)
   }, [isAuthenticated, user])
 
+  if (isRedirecting) return <div className="rounded-xl border border-brand-primary/20 bg-white p-6 text-center shadow-sm" role="status"><p className="font-semibold text-brand-primary">Redirecting to your dashboard…</p></div>
   if (isAuthenticated) return <Button variant="secondary" disabled={isSigningOut} onClick={() => void signOutAndReturnToLogin()}>{isSigningOut ? 'Signing out…' : 'Sign out'}</Button>
 
   async function submit(event: React.FormEvent) {
@@ -34,6 +36,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
     setIsSubmitting(true)
     try {
       await signIn('password', { flow: mode, email, password, ...(mode === 'signUp' ? { name, role } : {}) })
+      setIsRedirecting(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Authentication failed')
     } finally {
@@ -53,7 +56,7 @@ export default function AuthPanel({ initialMode = 'signUp' }: { initialMode?: 's
   }
 
   return <form className="flex w-full max-w-sm flex-col gap-4 text-left" onSubmit={submit}>
-    <div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => setMode('signUp')}>Sign up</Button><Button type="button" variant="secondary" onClick={() => setMode('signIn')}>Log in</Button></div>
+    <div className="flex gap-2"><Button type="button" variant={mode === 'signUp' ? 'primary' : 'secondary'} onClick={() => setMode('signUp')}>Sign up</Button><Button type="button" variant={mode === 'signIn' ? 'primary' : 'secondary'} onClick={() => setMode('signIn')}>Log in</Button></div>
     {mode === 'signUp' && <><TextField id="auth-name" label="Name" required value={name} onChange={(event) => setName(event.target.value)} /><Select id="auth-role" label="Account type" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="player">Player</option><option value="venueOwner">Venue owner</option></Select></>}
     <TextField id="auth-email" label="Email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
     <TextField id="auth-password" label="Password" required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
