@@ -545,3 +545,82 @@ Added 2026-09-18. `SPEC.md` §1 lists these as in-scope v1 user stories, but no 
 4. `npm test` and `npm run build` pass (no test coverage gap was closed by this fix — see the follow-up below).
 
 **Follow-up still needed (see Phase 11 and the note above):** verify and fix the same issue on the production Convex deployment before Task 11/12a are trusted for a real launch; consider adding at least one test that exercises real Convex Auth token issuance (not `withIdentity()`) so a regression here is caught automatically next time, since this entire class of bug was invisible to 53 passing tests.
+
+---
+
+# Phase 11 — Navigation Shell & Auth/Flow Redesign
+
+Added 2026-09-18, after dogfooding the app live in a browser for the first time (prompted by seeding `demo@example.com` and a direct request to improve UI/UX). Everything found here is presentation/flow, not logic — Convex functions and role checks are untouched by this phase, same discipline as Phase 9.
+
+**What dogfooding actually found**, concretely, not just "needs polish":
+
+1. **`/login` and `/signup` have zero branding.** Compare the landing page (`Landing.tsx`, `http://localhost:5174/`) — a fully designed hero with the badmintul wordmark, gradient accents, live-availability preview card — against `/login`: a single unstyled form floating in a sea of empty `#fafafa`, no logo, no header, no link back to `/`. It looks like a different, unfinished product.
+2. **The Sign up / Log in tabs are visually identical** (`AuthPanel.tsx`'s two `<Button variant="secondary">`s) — both have the same purple border and purple text regardless of which mode is active. A first-time visitor can't tell which tab they're on.
+3. **Every dashboard route (`/player`, `/venue-owner`, `/admin`) has zero navigation chrome.** `RoleDashboard.tsx` wraps its `children` in a bare centered `<main>` — no header, no logo, no link back anywhere, no visible indication of which role you're logged in as.
+4. **Sign-out is effectively unreachable in normal use — this is the standout finding.** The only sign-out control lives inside `AuthPanel`, which only renders at `/login`/`/signup`. But `AuthPanel` has its own effect that immediately redirects an *already-authenticated* visitor away from those routes to their dashboard (`user.role === 'venueOwner' ? '/venue-owner' : ...`) — so an authenticated user landing on `/login` sees the "Sign out" button for at most a brief flash before being bounced back to their dashboard, where there is no sign-out control at all. Confirmed live: `read_page` on `/admin` returns **zero interactive elements** beyond whatever role content is present — no way to leave except editing the URL bar. This is a real, confirmed dead end, not a hypothetical.
+5. **Post-login navigation is a hard full-page `window.location.replace`**, not an in-app transition — acceptable given the project's deliberate no-router-dependency choice (per Task 9's reasoning), but currently gives no feedback during the (brief but real) gap between "Sign out button flashes" and "dashboard appears."
+
+**Ordering:** Task 28 first — it's the single fix that resolves finding #4 (the confirmed dead end) and gives every other task a shell to build inside, so building 29–31 before 28 means redoing their layout once the shell lands. 29 and 31 can happen in either order after 28. Task 30 is small and independent, do it whenever convenient.
+
+---
+
+## Task 28 — Persistent app shell for authenticated routes
+
+**Goal:** Give every authenticated route (`/player`, `/venue-owner`, `/admin`) a persistent header with the badmintul wordmark, a visible role indicator, and — critically — an always-reachable sign-out control. This directly fixes finding #4 above: sign-out must never again depend on the user landing on `/login` before an effect races them away from it.
+
+**Scope boundaries:**
+- IN: A new shared header/shell component (e.g. `AppShell.tsx` in `src/components/`), rendered by `RoleDashboard.tsx` around `children` — replacing its current bare `<main>` wrapper. Contents: the "badmintul." wordmark (styled consistently with `Landing.tsx`'s nav, linking to the user's own dashboard route, not `/` — an authenticated user clicking the logo should stay in their dashboard context, not get bounced to the public landing page), a role badge/label (e.g. "Player" / "Venue owner" / "Superadmin"), and a Sign Out button that calls the same awaited-`signOut()`-then-navigate logic already correct in `AuthPanel.tsx` (Task 22) — do not reintroduce the fire-and-forget bug; either share the function or duplicate the *correct* implementation, not the original buggy one.
+- OUT: No sidebar, no multi-level nav, no notifications/settings menu — a single header bar is sufficient for this app's current surface area (3 dashboard routes, no sub-navigation within them yet). No changes to `AuthPanel.tsx`'s own sign-out button — it can stay as the fallback for the brief pre-redirect window, this task's fix is what makes it no longer the *only* way to sign out.
+
+**Acceptance criteria:**
+1. A Sign Out control is visible and clickable on `/player`, `/venue-owner`, and `/admin` at all times while authenticated — verify by loading each route and confirming a sign-out click works without navigating to `/login` first.
+2. The header shows which role is currently active.
+3. Clicking the wordmark/logo while authenticated stays within the authenticated experience (returns to the user's own dashboard route), not the public landing page.
+4. The suspended-user message from Task 26a still renders correctly (verify the shell doesn't wrap around the suspension message inappropriately, or does so in a way that still lets a suspended user sign out — a suspended user should be able to sign out too, so their sign-out must remain reachable even in that state).
+5. `npm test` and `npm run build` pass.
+
+---
+
+## Task 29 — Branded, clearer auth screens
+
+**Goal:** Fix findings #1 and #2. `/login` and `/signup` should look like they belong to the same product as the landing page, and a visitor should always be able to tell which mode (sign up vs. log in) is active.
+
+**Scope boundaries:**
+- IN: Add a minimal branded header above the auth form (wordmark linking back to `/`, consistent with `Landing.tsx`'s nav styling) — this can reuse or closely mirror `Landing.tsx`'s `<nav>` rather than inventing a new pattern. Give the Sign up / Log in tabs a clear active-vs-inactive visual state (e.g., filled `brand-primary` background for the active tab, the existing outline style for the inactive one) instead of two identically-styled buttons. Tighten the excessive empty vertical space around the form (currently the form floats in the vertical center of a mostly-empty viewport with no visual anchor).
+- OUT: No changes to the form fields themselves (Task 17/18 already gave them real labels and pending states) — this task is the screen's surrounding chrome and the tab affordance, not the inputs.
+
+**Acceptance criteria:**
+1. `/login` and `/signup` both show a header consistent with the landing page's branding, with a working link back to `/`.
+2. The active tab (Sign up or Log in) is visually distinguishable from the inactive one at a glance — not just by which fields happen to be showing.
+3. The form no longer feels like it's floating alone in an empty page — reasonable, intentional whitespace, not leftover default centering.
+4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 30 — Post-login/post-logout transition feedback
+
+**Goal:** Fix finding #5. The gap between submitting login credentials (or clicking sign out) and landing on the destination page currently gives no feedback beyond the existing per-button pending state (Task 18) — smooth this over so the hard navigation doesn't feel like a stall.
+
+**Scope boundaries:**
+- IN: A brief, clearly-labeled transitional state during the redirect — e.g., once credentials are accepted and a redirect is about to happen, show "Redirecting to your dashboard…" instead of leaving the (soon-to-be-replaced) form or bare "Sign out" button as the last thing the user sees. Same idea for sign-out: "Signing out…" already exists (Task 22) — confirm it's visible for the actual duration of the navigation, not just the `signOut()` call.
+- OUT: No client-side routing library, no page transition animations — this is copy/state feedback only, consistent with the project's existing lightweight approach.
+
+**Acceptance criteria:**
+1. Between successful login and the dashboard appearing, the user sees an explicit "redirecting" state, not the login form or a flash of the wrong content.
+2. Sign-out's existing "Signing out…" state (from `AppShell`, Task 28) remains visible through the full navigation, not just until the `signOut()` promise resolves.
+3. `npm test` and `npm run build` pass.
+
+---
+
+## Task 31 — Dashboard layout pass
+
+**Goal:** Fix finding #3's visual half (the nav chrome itself is Task 28's job) — once `AppShell` exists, replace the current centered-floating-card layout (`RoleDashboard.tsx`'s `<main className="min-h-screen ... items-center">` wrapping a single narrow `Card`) with a proper page layout: full-width content area below the header, consistent with how a real dashboard looks rather than a modal-like centered box.
+
+**Scope boundaries:**
+- IN: Adjust `RoleDashboard.tsx`'s content wrapper (now working alongside `AppShell` from Task 28) so dashboard content uses the available width sensibly (e.g., a max-width content column with left-aligned headings, not everything centered in a narrow card floating mid-screen). Apply consistent spacing between the existing panel sections (venue list, stats, incoming bookings, approval queue, etc. — content itself from Phase 9/10 is not being rewritten, just its container).
+- OUT: No new features, no changes to any panel's internal content/data — purely the outer layout container.
+
+**Acceptance criteria:**
+1. Dashboard content no longer reads as a small floating card in an otherwise-empty page — it uses the viewport width appropriately at both desktop and the 375px mobile width already required by Task 21's audit.
+2. No existing panel content, queries, or mutations are touched — verify via `git diff --stat app/convex/` showing zero changes.
+3. `npm test` and `npm run build` pass.
