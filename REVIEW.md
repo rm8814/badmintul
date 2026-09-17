@@ -590,3 +590,48 @@ Stayed inside the declared audit scope: yes. No WCAG CI integration or unrelated
 
 ### Follow-up tasks created (if any)
 None.
+## Task 13a — Clean up stale `Home.tsx`
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review" rather than self-certifying — matches the process CLAUDE.md/TASKS.md actually call for, a real improvement over earlier batches. Independently verified via `git diff` (not just re-reading the self-report).
+
+### Acceptance criteria check
+- [x] Criterion 1 — confirmed via `git diff app/src/pages/Home.tsx`: `connection.getStatus`/`recordCheck` imports and calls, the "Phase 1 scaffold" text, "Tailwind pipeline check" div, and "Test query + mutation" button are all removed.
+- [x] Criterion 2 — `Home.tsx` is now 9 lines, rendering only `<AuthPanel initialMode={authMode} />` inside a centered `<main>`.
+- [x] Criterion 3 — `App.tsx` routing to `Home` for `/login`/`/signup` is unchanged, so both routes now show only the auth form. Also independently confirmed via `grep` that `VenueOwnerPanel`/`SuperadminPanel`/`PlayerBrowsePanel` no longer appear anywhere in `Home.tsx`.
+- [x] Criterion 4 — `npm test` (42/42 across 21 files) and `npm run build` both re-run and pass in this review.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — diff touches only `Home.tsx` plus its new test file.
+- Out-of-scope work done anyway: none. `git diff --stat app/convex/` confirms zero Convex changes.
+
+### Deviations / notes
+`home-cleanup.test.ts` is a string-match test (same style as most of this project's tests) but it asserts both presence of the fix and absence of the removed panels/scaffold text, so it would genuinely catch a regression, not just confirm intent.
+
+### Follow-up tasks created
+None.
+
+## Task 15a — WIB-format the "My bookings" timestamp list
+
+**Date completed:** 2026-09-17
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review" rather than self-certifying. Independently verified via `git diff`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — confirmed via `git diff app/src/components/PlayerBrowsePanel.tsx`: the one-line change replaces `{new Date(booking.startTime).toLocaleString()}` with `{formatWibTime(booking.startTime)} WIB`, reusing the same `wib.ts` helper already used by the availability grid — consistent with the rest of the file rather than introducing a second formatting approach.
+- [x] Criterion 2 — `npm test` (42/42) and `npm run build` both re-run and pass in this review.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — a one-line change plus its test file. `git diff --stat app/convex/` confirms zero Convex changes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None.
+
+### Follow-up tasks created
+None.
