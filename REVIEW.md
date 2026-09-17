@@ -762,3 +762,26 @@ Authorization helpers remain per-file (not consolidated into one shared helper) 
 
 ### Follow-up tasks created
 - **Task 26a (new, appended to `TASKS.md`):** Fix the suspended-user crash. Recommended approach: add the suspension check once in `RoleDashboard.tsx` (which already fetches `user` via `api.roles.getCurrentUser` and gates on role) rather than patching three separate panels' query conditions — if `user.suspended === true`, show a clear "Your account has been suspended" message instead of rendering `children`, before any role-scoped query fires. This is a single-point fix consistent with `RoleDashboard`'s existing job of gating access before its children ever mount.
+## Task 26a — Fix suspended-user dashboard crash
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified against `RoleDashboard.tsx` and re-ran the full suite.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `if (user.suspended === true) return <main>...Your account has been suspended...</main>`, placed exactly as recommended.
+- [x] Criterion 2 — verified this is a genuine fix, not cosmetic: the suspension check is an early `return` before the `children`-rendering branch, so `PlayerBrowsePanel`/`VenueOwnerPanel`/`SuperadminPanel` never mount for a suspended user, and their role-scoped queries (`listMyBookings`, `listMyVenues`, etc. — the ones that now throw for a suspended user per Task 26) never fire. Also confirmed *why* this is safe: `RoleDashboard`'s own `useQuery(api.roles.getCurrentUser)` call reads `roles.ts`'s `getCurrentUser`, which does **not** check suspension (`return userId ? await ctx.db.get(userId) : null` — no `getUserOrThrow`) — so `RoleDashboard` itself can never crash reading `user.suspended`, closing the loop cleanly.
+- [x] Criterion 3 — verified: the suspension check sits after the existing loading/auth/role-mismatch checks, doesn't alter their logic. Role-mismatch for a suspended user (e.g., a suspended player hitting `/admin`) still correctly hits the role-mismatch branch first, not the suspension message — this is right, since a wrong-role visitor shouldn't learn about someone else's suspension status via a role check they're not even authorized to attempt.
+- [x] Criterion 4 — `npm test` (53/53, re-run) and `npm run build` pass. `git diff --stat app/convex/` confirms zero Convex changes, matching the task's OUT scope.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — single-file fix, no panel-level changes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None. This closes Phase 10 — no known open code-fixable defects remain across the project as of this review; only the external blockers (Hostinger credentials, physical-device PWA testing) noted throughout prior reviews.
+
+### Follow-up tasks created
+None.
