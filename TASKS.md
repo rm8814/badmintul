@@ -782,3 +782,66 @@ Added 2026-09-18. Turn the landing experience into a clear commercial entry poin
 1. Every component under `app/src/components/ui/` is imported by at least one real screen, or has been removed.
 2. `grep -rl` for each retained component's name across `src/pages/` and `src/components/` (excluding the component's own file) returns at least one match.
 3. `npm test` and `npm run build` pass, with no orphaned test files left for deleted components.
+
+---
+
+# Phase 14 — Dashboard Shell: Sidebar Navigation & Modern App Layout
+
+Added 2026-09-19, per direct request: turn the current single-header dashboard layout into a proper commercial-web-app shell (left sidebar + topbar) for `/player`, `/venue-owner`, `/admin`. Today, `AppShell.tsx` is a single top header (logo, role badge, sign-out) and each role's entire dashboard is one long-scrolling panel (`VenueOwnerPanel.tsx` alone stacks venue submission, stats, incoming bookings, and a venues list in ~60 lines). This phase splits that into sidebar-navigable sections, matching how a real commercial dashboard (Stripe, Linear, etc.) is organized. This is presentation/routing only — same discipline as Phases 9 and 11: **no `convex/*.ts` changes anywhere in this phase.**
+
+**Ordering:** Task 42 first (the shell itself — sidebar + topbar, replacing `AppShell`'s current single header). Task 43 second (splits each role's panel into the sidebar's nav destinations — needs the sidebar to exist first). Task 44 can happen in parallel with 43 once 42 lands (it only touches the topbar's user menu, not the sidebar or the split panels). Task 45 last, since it audits the outcome of 42–44.
+
+## Task 42 — Sidebar + topbar shell
+
+**Goal:** Replace `AppShell.tsx`'s single header with a persistent left sidebar (role-aware nav items) and a topbar (page title, user/role area), the standard commercial-dashboard layout skeleton.
+
+**Scope boundaries:**
+- IN: A new sidebar component listing that role's nav destinations (defined per role — see Task 43 for what those destinations are), highlighting the active one. Collapses to a mobile drawer/hamburger toggle below a reasonable breakpoint (this app already has a 375px mobile-usability bar to clear, per Task 21/35). Topbar keeps the current sign-out reachability guarantee from Task 28 — moving it into a user menu (Task 44) is fine, removing it without a replacement is not. `RoleDashboard.tsx`'s existing loading/auth/role-mismatch/suspended-user logic is untouched; this task only changes what renders once those checks pass.
+- OUT: No new Convex queries/mutations. No sidebar destinations that don't map to something Task 43 actually builds — don't add nav items for screens that don't exist yet.
+
+**Acceptance criteria:**
+1. `/player`, `/venue-owner`, `/admin` each render a left sidebar with that role's nav items and a topbar, not the current single-header layout.
+2. The sidebar collapses to a usable mobile pattern (drawer/hamburger) at 375px width — verified live, not just by class names.
+3. Sign-out remains reachable at all times, including for a suspended user (Task 26a/28's existing guarantee) — verify explicitly, this is the exact regression class Task 28 was created to fix.
+4. `npm test` and `npm run build` pass; `git diff --stat app/convex/` shows zero changes.
+
+## Task 43 — Split dashboard panels into sidebar-navigable sections
+
+**Goal:** Turn each role's single long-scrolling panel into distinct views reachable from Task 42's sidebar, using real routes (consistent with this app's existing manual-pathname routing in `App.tsx` — add new `if (path === ...)` branches, no router dependency).
+
+**Scope boundaries:**
+- IN: Venue owner: split `VenueOwnerPanel.tsx` into separate views for venue submission/list, incoming bookings, and stats (e.g. `/venue-owner`, `/venue-owner/bookings`, `/venue-owner/stats` — exact paths are an implementation choice, keep them predictable). Superadmin: split `SuperadminPanel.tsx` into approval queue and metrics views. Player: `PlayerBrowsePanel.tsx` can reasonably stay closer to one view (browse+book is one flow) but split "My bookings" into its own sidebar destination if it reads better that way — use judgment, the goal is real navigable sections, not maximum fragmentation for its own sake.
+- OUT: No new data, no new Convex functions — every view already has a query it reuses from the existing panel code, just relocated. No change to any acceptance criteria from Tasks 5, 6, 7, 8, 23, 24, 25 (the underlying features) — this is purely where their existing UI lives.
+
+**Acceptance criteria:**
+1. Each sidebar nav item (Task 42) routes to a real, distinct view with its own URL.
+2. All existing functionality (venue submission, approval actions, booking, stats, etc.) still works — verify by re-running each role's existing manual flow, not just checking the code moved.
+3. Direct navigation to a sub-view URL (not just clicking the sidebar link) works correctly, including the existing auth/role/suspension gating from `RoleDashboard.tsx`.
+4. `npm test` and `npm run build` pass; `git diff --stat app/convex/` shows zero changes.
+
+## Task 44 — Topbar user menu
+
+**Goal:** Replace the plain role-badge-plus-button in the current header with a proper user menu (dropdown) in the topbar — the piece that makes this read as a "modern commercial web-app" rather than a header with two elements in it.
+
+**Scope boundaries:**
+- IN: A dropdown/menu triggered from the topbar showing the current role and a sign-out action, using the same awaited-`signOut()`-then-navigate logic already correct (Task 22, Task 28a's race fix). Keyboard-operable (open on Enter/Space, close on Escape, per this project's existing accessibility bar from Task 21).
+- OUT: No notifications bell, no search bar, no settings menu — don't add UI for features that don't exist, per this project's standing anti-fabrication rule (same spirit as Task 38/40's "no invented content").
+
+**Acceptance criteria:**
+1. The user menu opens/closes via mouse and keyboard, and sign-out from inside it goes through the same race-condition-safe path as Task 28a.
+2. No placeholder UI exists for unbuilt features (no dead notification icons, no non-functional search input).
+3. `npm test` and `npm run build` pass.
+
+## Task 45 — Shell visual QA pass
+
+**Goal:** Verify the new sidebar/topbar shell (Tasks 42–44) holds up to this project's existing bars: accessibility (Task 21) and responsive/visual consistency (Task 35).
+
+**Scope boundaries:**
+- IN: Keyboard navigation through the sidebar and user menu with visible focus states; WCAG AA contrast check for any new color combinations introduced (reuse existing tokens from Task 32 wherever possible instead of inventing new ones, which minimizes what needs checking); 375px/tablet/desktop check with no horizontal overflow. Fix what's found rather than only cataloging it, consistent with Task 12/21's established pattern.
+- OUT: No new features. This is a verification-and-fix task, same scope discipline as Task 21/35.
+
+**Acceptance criteria:**
+1. Every new interactive element (sidebar links, collapse toggle, user menu) is keyboard-operable with a visible focus indicator.
+2. Any new color combination is checked against WCAG AA and passes or is fixed.
+3. No viewport (375px, tablet, desktop) shows horizontal overflow or clipped content in the new shell.
+4. Findings and fixes recorded in `REVIEW.md`; `npm test` and `npm run build` pass.
