@@ -9,5 +9,5 @@ const variants = {
 }
 
 export default function Button({ variant = 'primary', className = '', disabled, ...props }: ButtonProps) {
-  return <button disabled={disabled} className={`rounded-lg px-4 py-2 font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`} {...props} />
+  return <button disabled={disabled} className={`rounded-control px-4 py-2 font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`} {...props} />
 }

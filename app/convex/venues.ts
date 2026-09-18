@@ -105,7 +105,19 @@ export const removeCourtBlock = mutation({
 
 export const listApprovedVenues = query({
   args: {},
-  handler: async (ctx) => (await ctx.db.query("venues").withIndex("by_approvalStatus", (q) => q.eq("approvalStatus", "approved")).collect()).filter((venue) => venue.suspended !== true),
+  handler: async (ctx) => {
+    const venues = (await ctx.db.query("venues").withIndex("by_approvalStatus", (q) => q.eq("approvalStatus", "approved")).collect()).filter((venue) => venue.suspended !== true);
+    return await Promise.all(venues.map(async (venue) => {
+      const courts = await ctx.db.query("courts").withIndex("by_venueId", (q) => q.eq("venueId", venue._id)).collect();
+      const prices = courts.map((court) => court.pricePerHour);
+      return {
+        ...venue,
+        courtCount: courts.length,
+        lowestPrice: prices.length ? Math.min(...prices) : null,
+        highestPrice: prices.length ? Math.max(...prices) : null,
+      };
+    }));
+  },
 });
 
 export const getApprovedVenue = query({
