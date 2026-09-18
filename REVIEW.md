@@ -1391,3 +1391,106 @@ Could not force a true mobile-width viewport live this session (the browser-auto
 
 ### Follow-up tasks created
 None. This closes out Phase 14's known issues — no open code-fixable defects remain in this batch.
+## Task 46 — Player My Bookings and cancellation
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified via code inspection and the passing test suite.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `/player/bookings` lists bookings with a Cancel button only on `status === 'confirmed'` rows.
+- [x] Criterion 2 — verified: `pendingCancellation` disables the button and shows "Cancelling…" during the call; `listMyBookings` is a live query, so status updates reactively with no extra code needed.
+- [x] Criterion 3 — verified: `cancellationError` surfaces `caught.message` (e.g., the server's 2-hour-window rejection) via `role="alert"`.
+- [x] Criterion 4 — verified in `AppShell.tsx`'s `roleNav.player`.
+- [x] Criterion 5 — `npm test` (104/104, re-run) and `npm run build` pass; `git diff --stat app/convex/` for this task alone shows no changes (bookings.ts is untouched by Task 46 specifically — the diff includes admin.ts/venues.ts changes from Tasks 47–49 in the same batch, which is expected).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None. This is the cleanest task in the batch — no new backend surface, straightforward UI wiring.
+
+### Follow-up tasks created
+None.
+## Task 47 — Venue owner availability and maintenance management
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review," and its "Deviations" note transparently disclosed the `listMyVenues` shape change rather than hiding it — good practice.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: block form's court `<Select>` is populated from `venues?.flatMap(v => v.courts...)`, so an owner can only pick from their own courts (also enforced server-side by `requireOwnedCourt` inside `createCourtBlock`, defense in depth). Confirmed the WIB-explicit date math (`new Date(`${blockDate}T${blockStart}:00+07:00`)`), consistent with Task 15's established pattern.
+- [x] **Criterion 2 — this is the R-8-style check, confirmed real.** `listBlocksForMyVenues` derives owner → venues → courts → blocks, never trusting a client-supplied id. `court-blocks.test.ts`'s new test creates blocks as two different owners and asserts owner A's query returns only their own block (`toHaveLength(1)`, correct `courtId`) — re-ran this test directly, passes. Real isolation, not just UI hiding.
+- [x] Criterion 3 — verified: `blockError` surfaces `caught.message`, including the "existing confirmed booking" rejection from Task 23's unchanged mutation logic.
+- [x] Criterion 4 — verified in `AppShell.tsx`.
+- [x] Criterion 5 — `npm test` (104/104) and `npm run build` pass.
+
+**Minor gap, not in the original acceptance criteria:** `deleteBlock`'s Remove button has no pending/disabled state — unlike every other mutation-backed control in this project since Task 18 (including the Approve/Reject buttons in this same superadmin panel file). Not a correctness bug (a double-click just produces a harmless "not found" error on the second call), but a real consistency gap worth closing.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — the `listMyVenues` shape addition is a reasonable, disclosed extension needed to populate the court picker, not scope creep.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+`listMyVenues`'s new `courts` field was verified non-breaking: `VenueOwnerPanel`'s "overview" view still only reads `venue.name`/`venue.approvalStatus`, so the added field doesn't affect existing rendering.
+
+### Follow-up tasks created
+- **Task 47a (see below, bundled with Tasks 48/49's similar gaps, appended to `TASKS.md`):** add pending/disabled states to `deleteBlock`, `toggleSuspended`, and `toggleUserSuspended` — none of the three new suspend/remove controls in this batch have one, unlike every other mutation-backed control in the project.
+## Task 48 — Superadmin venue moderation view
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review."
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `listAllVenues` (`ctx.db.query("venues").collect()`, no status filter) backs `/admin/venues`, showing pending/approved/rejected alike.
+- [x] Criterion 2 — verified via `admin.test.ts`'s new test: suspends an approved venue, confirms it disappears from `listApprovedVenues` — real end-to-end check, not just "the mutation was called."
+- [x] Criterion 3 — verified: `player.query(api.admin.listAllVenues, {})` rejects with `'Superadmin role required'` in the same test — re-ran, passes.
+- [x] Criterion 4 — verified in `AppShell.tsx`.
+- [x] Criterion 5 — `npm test` (104/104) and `npm run build` pass.
+
+**Same minor gap as Task 47:** `toggleSuspended` has no pending/disabled state — bundled into Task 47a below.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the pending-state gap, bundled into Task 47a.
+
+### Follow-up tasks created
+See Task 47a below.
+## Task 49 — Superadmin user moderation view
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Criteria 1–6 as stated are genuinely met, with a real standout: the field-minimization test. But this task introduces a real, live-confirmed product-safety gap the acceptance criteria never anticipated — **a superadmin can suspend their own account with one click and no confirmation, permanently locking themselves out.**
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live at `/admin/users`.
+- [x] Criterion 2 — verified via `admin.test.ts`: after `setUserSuspended`, the suspended player's `listMyBookings` call rejects with `'suspended'` — real end-to-end enforcement, matching Task 26a's existing guarantee.
+- [x] Criterion 3 — verified: both `listUsers` and `setUserSuspended` reject a non-superadmin identity with `'Superadmin role required'`.
+- [x] **Criterion 4 — this is the standout piece of this whole batch.** The test doesn't just check a couple of expected fields are present — it asserts `Object.keys(player).sort()` equals **exactly** `['_id', 'email', 'role', 'suspended']`, seeding the test user with `name`/`phone` fields specifically to prove they're *not* leaked. This is a materially stronger test than "spot-check" implies, and a good pattern other minimal-projection queries in this codebase should follow.
+- [x] Criterion 5 — verified in `AppShell.tsx`.
+- [x] Criterion 6 — `npm test` (104/104) and `npm run build` pass.
+
+**Real safety gap found, not anticipated by this task's own acceptance criteria — verified live, not hypothetical.** `listUsers` returns every user in the system, including the calling superadmin themselves — there is no `user._id !== currentUser._id` filter anywhere, client or server. I navigated to `/admin/users` as `demo@example.com` (the only user in this dev deployment, and its only superadmin) and confirmed live: a bright red "Suspend" button sits directly next to that account's own row, with no exclusion, no warning, and no confirmation dialog. **I did not click it** — doing so would immediately lock out the only superadmin account in this deployment, since Task 26a's own (correct) enforcement rejects a suspended user's calls even mid-session, and there is no other superadmin to undo it without falling back to CLI-level access (re-running `promoteUserToSuperadmin` and unsuspending via `--identity`, both of which require deploy access). This is exactly the kind of self-inflicted lockout the review process exists to catch before it happens to a real user, not after.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes on what was asked — this gap exists because the task brief (mine) never anticipated the self-suspension case, not because Codex went out of scope.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the safety gap above.
+
+### Follow-up tasks created
+- **Task 49a (new, appended to `TASKS.md`, priority):** Prevent self-suspension. Recommend a server-side guard in `setUserSuspended` (reject if `userId === callerId`) as the primary fix — per this project's own standing rule that authorization/safety checks belong at the Convex function level, not only in the UI — plus a client-side disable/hide on the current user's own row as a secondary, non-load-bearing UX nicety.

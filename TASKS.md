@@ -963,3 +963,32 @@ Added 2026-09-19. Found while designing the sidebar menu structure per role: thr
 4. `listUsers`'s returned shape is spot-checked to confirm it contains only `email`/`role`/`suspended` (plus the document id), not any other field from the `users` table.
 5. "Users" appears as a distinct sidebar nav item for the superadmin role.
 6. `npm test` and `npm run build` pass.
+
+---
+
+## Task 47a — Add pending/disabled states to new suspend/remove controls
+
+**Goal:** Fix a real, if minor, consistency gap found during independent review of Tasks 47–48 (see `REVIEW.md`): `VenueOwnerPanel`'s `deleteBlock` and `SuperadminPanel`'s `toggleSuspended`/`toggleUserSuspended` are the only mutation-backed controls in the project without a pending/disabled state — every other one, including the Approve/Reject buttons in the very same `SuperadminPanel` file, has followed the Task 18 pattern since it was established.
+
+**Scope boundaries:**
+- IN: Add a pending state (disable the button, show an in-progress label) to `deleteBlock` in `VenueOwnerPanel.tsx`, and to `toggleSuspended`/`toggleUserSuspended` in `SuperadminPanel.tsx`, matching the existing `pendingAction`/`pendingCancellation` pattern used elsewhere in these same files.
+- OUT: No other behavior changes — this is presentation-only, no `convex/*.ts` changes.
+
+**Acceptance criteria:**
+1. Clicking Remove/Suspend/Unsuspend disables that control and shows an in-progress label for the duration of the mutation call, consistent with every other mutation-backed control in the project.
+2. A second click while pending does not fire a second mutation call.
+3. `npm test` and `npm run build` pass.
+
+## Task 49a — Prevent superadmin self-suspension (priority)
+
+**Goal:** Fix a real, live-confirmed safety gap found during independent review of Task 49 (see `REVIEW.md`): `listUsers` returns every user including the caller, and nothing — client or server — prevents a superadmin from suspending their own account. Confirmed live: a "Suspend" button sits next to the current superadmin's own row with no exclusion or confirmation. Since a suspended user is rejected by every role-check helper even mid-session (Task 26a's own correct enforcement), a single misclick would immediately and completely lock out the account, with no other superadmin available to undo it short of CLI-level deploy access.
+
+**Scope boundaries:**
+- IN: Add a server-side guard in `setUserSuspended` (in `convex/admin.ts`) that rejects an attempt to suspend the caller's own account (`userId === callerId`), per this project's standing rule that safety/authorization checks belong at the Convex function level, not only in the UI. Also disable or hide the Suspend control on the current user's own row in `SuperadminPanel.tsx` as a secondary, non-load-bearing UX affordance — the server guard is the actual protection.
+- OUT: No change to suspending *other* users, which should continue working exactly as it does now. No confirmation-dialog pattern needs to be introduced generally — this is specifically about blocking the self-suspension case, not adding friction to normal moderation.
+
+**Acceptance criteria:**
+1. Calling `setUserSuspended` with the caller's own user id and `suspended: true` is rejected server-side with a clear error — write an explicit test for this (seed a superadmin, call `setUserSuspended` on their own id as themselves, assert rejection).
+2. Suspending a *different* user still works exactly as before — verify the existing `admin.test.ts` suspension test still passes unchanged.
+3. The current user's own row in `/admin/users` does not offer a functioning Suspend action (disabled or hidden) — verify live.
+4. `npm test` and `npm run build` pass.
