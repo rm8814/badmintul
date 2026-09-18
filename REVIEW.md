@@ -1337,3 +1337,33 @@ The shell QA is covered by source-level responsive and accessibility contracts; 
 
 ### Follow-up tasks created (if any)
 None.
+## Tasks 43a and 44a — Dashboard route metadata and shell dismissal follow-ups
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Task 43a is a genuinely good fix, with a real test-quality improvement over this project's usual pattern. Task 44a's outside-click fix is also genuinely correct. But **Task 44a's `aria-hidden` fix does not work, and independently makes accessibility worse than before on desktop** — this is the standout finding.
+
+### Acceptance criteria check
+
+**Task 43a:**
+- [x] Criterion 1 — verified live: navigated to `/admin/metrics`, confirmed `document.title === 'Dashboard — badmintul'` and `document.querySelector('meta[name="robots"]').content === 'noindex, nofollow'` — the exact regression from the prior review is fixed.
+- [x] Criterion 2/3 — genuinely improved test quality: `followup-shell-fixes.test.ts` calls the real `isAuthenticatedRoute`/`getRouteTitle` functions from the new `route-metadata.ts` module with actual path strings and asserts real return values (`expect(isAuthenticatedRoute('/admin/metrics')).toBe(true)`), not just checking that a string exists somewhere in source — this is a direct, welcome response to my prior review calling out that exact gap ("add or update a test that actually renders/simulates each route... not just that certain strings exist somewhere in the file").
+
+**Task 44a:**
+- [x] Outside-click dismissal — **verified live and genuinely correct.** Opened the user menu via a real click, dispatched a `pointerdown` on an unrelated `<h1>`, confirmed the menu closed. This is a real fix, not a source-string check pretending to be one.
+- [ ] **Closed-sidebar focusability — FAILS live verification, and the underlying approach is broken by construction.** I focused a link inside the `<aside>` directly (`link.focus()`) while `aria-hidden="true"` was set, and `document.activeElement === link` was `true` — **the link remains fully focusable via keyboard despite `aria-hidden`.** This is a known, documented ARIA anti-pattern: `aria-hidden="true"` removes an element from the accessibility tree for screen readers, but does **not** remove its focusable descendants from the tab order — the two are independent mechanisms. The original task brief anticipated this and offered `inert` as the alternative specifically because `inert` (unlike `aria-hidden`) *does* remove elements from the tab order; the fix used only `aria-hidden`, which doesn't solve the problem it was meant to solve.
+- [ ] **New regression, more severe than the original bug: the sidebar is now `aria-hidden="true"` at desktop width too.** `isNavOpen` starts `false` and is only ever set `true` by the hamburger button, which is `lg:hidden` — so on any desktop-width viewport, `isNavOpen` never becomes `true`, meaning `aria-hidden={!isNavOpen}` evaluates to `aria-hidden="true"` **permanently**, even though `lg:static lg:translate-x-0` makes the sidebar fully visible and functional there. Verified live at 1536px width: `aside.getAttribute('aria-hidden') === 'true'` while `aside.getBoundingClientRect().width > 0` and `visibility !== 'hidden'` — a real, currently-used, always-visible navigation landmark is hidden from every screen reader user on desktop, all the time. This is worse than the bug it was meant to fix: the original issue only affected keyboard users on a *closed mobile* drawer; this affects *all* screen reader users on the *primary, always-visible* desktop sidebar.
+- [x] Escape-close, sidebar overlay-click-close, and sign-out are all unaffected — verified unchanged in the diff.
+- [x] `npm test` (92/92) and `npm run build` pass — neither the focusability regression nor the desktop `aria-hidden` regression is caught by any test, since `followup-shell-fixes.test.ts`'s check for this is `expect(shell).toContain('aria-hidden={!isNavOpen}')` — a string-match on the exact broken expression, which "passes" precisely because the broken code is present.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes on files touched (`App.tsx`, `AppShell.tsx`, new `route-metadata.ts`).
+- Out-of-scope work done anyway: none — but see the new regression above, which is an unintended side effect within the declared scope, not scope creep.
+
+### Deviations / notes
+Task 43a's fix and its test are a genuine improvement in this project's testing discipline — worth calling out positively, not just critically. Task 44a's outside-click half is equally solid. The `aria-hidden` half needs to be redone: it requires knowing whether the sidebar is at its "always-visible desktop" breakpoint (e.g., via `matchMedia('(min-width: 1024px)')` or an equivalent resize-aware check) and only applying `aria-hidden`/`inert` when the sidebar is *actually* off-screen (mobile AND closed) — `isNavOpen` alone conflates "mobile drawer state" with "is the sidebar hidden," which are different things once the `lg:` breakpoint always shows it regardless of that state. `inert` should be used instead of `aria-hidden` for the actually-hidden case, per the original task's own suggestion, since only `inert` removes descendants from the tab order.
+
+### Follow-up tasks created
+- **Task 44b (new, appended to `TASKS.md`):** Fix the sidebar's hidden-state accessibility for real — condition `aria-hidden`/`inert` on whether the sidebar is genuinely off-screen (mobile viewport AND closed), not on `isNavOpen` alone, and use `inert` rather than `aria-hidden` so focus is actually blocked, not just hidden from the accessibility tree while remaining tabbable. Verify live with `element.focus(); document.activeElement === element` at both mobile and desktop widths, not just a source-string check.

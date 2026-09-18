@@ -875,3 +875,20 @@ Added 2026-09-19, per direct request: turn the current single-header dashboard l
 2. Opening the user menu and then clicking anywhere else on the page closes it — verify live, not just by reading code (this is exactly the kind of thing a source-string test won't catch).
 3. Existing behaviors (Escape closes the menu, sidebar overlay click closes the sidebar, sign-out still works) are unaffected.
 4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 44b — Fix sidebar hidden-state accessibility for real (priority)
+
+**Goal:** Task 44a's outside-click fix for the user menu is genuinely correct (verified live). Its `aria-hidden` fix for the mobile sidebar is not: `aria-hidden="true"` does not remove focusable descendants from the tab order (a well-documented ARIA limitation — `aria-hidden` and focusability are independent), so the closed sidebar's nav links are still reachable via `Tab`, confirmed live with `link.focus(); document.activeElement === link` returning `true`. Worse, `aria-hidden={!isNavOpen}` is now applied **permanently at desktop width**, since `isNavOpen` only ever becomes `true` via the mobile-only (`lg:hidden`) hamburger button — meaning the sidebar's own always-visible desktop `<aside>` (`lg:static lg:translate-x-0`) is now hidden from every screen reader user, all the time, on the primary way this navigation is actually used. This is a launch-relevant accessibility regression, worse than the bug it was meant to fix.
+
+**Scope boundaries:**
+- IN: Replace the `aria-hidden={!isNavOpen}` approach with one that (a) only marks the sidebar hidden/inert when it is *genuinely* off-screen — i.e., mobile viewport width AND `isNavOpen === false` — not whenever `isNavOpen` is false regardless of viewport; and (b) uses `inert` rather than `aria-hidden` for the actually-hidden case, since `inert` (not `aria-hidden`) is what actually removes an element's descendants from the tab order. Detecting "mobile viewport" can use `window.matchMedia('(min-width: 1024px)')` (matching the existing `lg:` Tailwind breakpoint) with a resize listener, or an equivalent approach — the exact mechanism is an implementation choice, but it must not rely on `isNavOpen` alone, since that state doesn't track viewport width.
+- OUT: No other shell behavior changes — Task 44a's outside-click fix, Escape-to-close, and the sidebar's overlay-click-to-close are all correct as-is and should not be touched.
+
+**Acceptance criteria:**
+1. At a desktop-width viewport (≥1024px / the `lg:` breakpoint), the sidebar is never `aria-hidden`/`inert` — verify live: `document.querySelector('aside').getAttribute('aria-hidden')` should not be `'true'` at desktop width, since the sidebar is genuinely visible and in use there.
+2. At a mobile-width viewport with the sidebar closed, its nav links are **not** reachable via keyboard focus — verify live with `link.focus(); document.activeElement === link` returning `false` (not just checking an attribute exists in source).
+3. At a mobile-width viewport with the sidebar open, its nav links **are** reachable via keyboard focus (the fix must not overcorrect into hiding it when it's genuinely open and visible).
+4. Add a test that actually checks focusability (e.g., via a DOM/jsdom-based check or an equivalent behavioral assertion), not a string-match against the exact expression used in the implementation — the prior test (`expect(shell).toContain('aria-hidden={!isNavOpen}')`) passed precisely because it matched the broken code verbatim, which is why this regression wasn't caught.
+5. `npm test` and `npm run build` pass.
