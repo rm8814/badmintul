@@ -6,6 +6,8 @@ Instructions for **ChatGPT Codex**, acting as implementer on this project (badmi
 
 This project is planned and scaffolded by Claude Code, and implemented, debugged, and tested by you (Codex). Planning docs (`SPEC.md`, `ROADMAP.md`, `RISKS.md`, `TASKS.md`) are written by/with Claude Code and are authoritative — treat them as your spec, not as suggestions. `TASKS.md` is written specifically as your handoff brief: read it in full before starting, and implement tasks **in the order listed**, one at a time.
 
+**Do not write new phases or tasks into `TASKS.md`/`ROADMAP.md` yourself, even if asked to "plan" something.** If a request sounds like planning — new phases, a batch of new tasks, deciding what to build next — stop and say the planning needs to go through Claude Code first, rather than authoring it and/or implementing it yourself. This came up directly on 2026-09-18: a batch of two self-planned phases (10 tasks) was implemented in one unreviewed pass, which worked out fine on technical merit but skipped the review checkpoint the workflow depends on, and produced real waste (an entire 12-component UI library nothing ended up using) that a review-before-build step would have caught early. Implement the task in front of you; propose ideas for what's next if asked, but don't add them to these files or start building them without Claude Code writing the task brief first.
+
 ## Repo layout — read this before creating any file
 
 **All application code lives inside `app/`. The repo root is planning-docs-only.**
@@ -50,7 +52,7 @@ Do not attempt these from repo root — there is no `package.json` there.
 1. Read the full task entry: goal, scope boundaries (IN/OUT), and acceptance criteria.
 2. Respect the OUT boundaries as strictly as the IN ones — building extra "obviously useful" functionality outside a task's declared scope is not helpful here; it makes review harder and can violate a non-goal in `SPEC.md`.
 3. If an acceptance criterion can't be met without a decision that hasn't been made (check `RISKS.md` for BLOCKING items relevant to the current phase), stop and surface this rather than guessing.
-4. When done, fill out a `REVIEW.md` entry for the task using its template before moving to the next task.
+4. When done, fill out a `REVIEW.md` entry for the task using its template, marked "Pending independent review" — do not self-certify as reviewed. If you were handed several tasks at once, it's fine to implement them in sequence, but flag clearly when you're doing so; don't treat a multi-task handoff as license to also decide what the next batch of tasks should be.
 5. Verify security/isolation-sensitive acceptance criteria (role checks, owner-scoped data) with an actual negative test (attempt the disallowed action and confirm rejection), not just by inspecting that the "happy path" works.
 
 ## Non-negotiables
