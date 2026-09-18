@@ -6,19 +6,20 @@ import PlayerBrowsePanel from './components/PlayerBrowsePanel'
 import VenueOwnerPanel from './components/VenueOwnerPanel'
 import SuperadminPanel from './components/SuperadminPanel'
 import InfoPage from './pages/InfoPage'
+import { getRouteTitle, isAuthenticatedRoute } from './lib/route-metadata'
 
 function App() {
   const path = window.location.pathname
   useEffect(() => {
-    const isAuthenticatedRoute = ['/player', '/venue-owner', '/admin'].includes(path)
+    const authenticatedRoute = isAuthenticatedRoute(path)
     const isAuthRoute = ['/login', '/signup'].includes(path)
-    const title = path === '/' ? 'badmintul — Booking lapangan badminton' : isAuthenticatedRoute ? 'Dashboard — badmintul' : isAuthRoute ? `${path === '/login' ? 'Masuk' : 'Daftar'} — badmintul` : 'badmintul — Informasi'
+    const title = getRouteTitle(path)
     document.title = title
     const description = document.querySelector('meta[name="description"]')
-    description?.setAttribute('content', isAuthenticatedRoute || isAuthRoute ? 'Akses akun badmintul.' : 'Temukan dan booking lapangan badminton dengan slot dan waktu yang jelas di badmintul.')
+    description?.setAttribute('content', authenticatedRoute || isAuthRoute ? 'Akses akun badmintul.' : 'Temukan dan booking lapangan badminton dengan slot dan waktu yang jelas di badmintul.')
     const robots = document.querySelector('meta[name="robots"]') ?? document.createElement('meta')
     robots.setAttribute('name', 'robots')
-    robots.setAttribute('content', isAuthenticatedRoute || isAuthRoute ? 'noindex, nofollow' : 'index, follow')
+    robots.setAttribute('content', authenticatedRoute || isAuthRoute ? 'noindex, nofollow' : 'index, follow')
     if (!robots.parentElement) document.head.appendChild(robots)
     const canonical = document.querySelector('link[rel="canonical"]')
     canonical?.setAttribute('href', `https://badmintul.com${path === '/' ? '/' : path}`)
