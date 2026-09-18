@@ -19,6 +19,23 @@ export const listPendingVenues = query({
   },
 });
 
+export const listAllVenues = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSuperadmin(ctx);
+    return await ctx.db.query("venues").collect();
+  },
+});
+
+export const listUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSuperadmin(ctx);
+    const users = await ctx.db.query("users").collect();
+    return users.map((user) => ({ _id: user._id, email: user.email, role: user.role, suspended: user.suspended === true }));
+  },
+});
+
 export const setVenueApproval = mutation({
   args: { venueId: v.id("venues"), status: v.union(v.literal("approved"), v.literal("rejected")) },
   handler: async (ctx, args) => {

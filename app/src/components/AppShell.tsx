@@ -22,9 +22,9 @@ const roleRoutes: Record<Role, string> = {
 }
 
 const roleNav: Record<Role, { label: string; href: string }[]> = {
-  player: [{ label: 'Browse courts', href: '/player' }],
-  venueOwner: [{ label: 'Venue overview', href: '/venue-owner' }, { label: 'Bookings', href: '/venue-owner/bookings' }, { label: 'Stats', href: '/venue-owner/stats' }],
-  superadmin: [{ label: 'Approval queue', href: '/admin' }, { label: 'Metrics', href: '/admin/metrics' }],
+  player: [{ label: 'Browse courts', href: '/player' }, { label: 'My Bookings', href: '/player/bookings' }],
+  venueOwner: [{ label: 'Venue overview', href: '/venue-owner' }, { label: 'Bookings', href: '/venue-owner/bookings' }, { label: 'Availability', href: '/venue-owner/availability' }, { label: 'Stats', href: '/venue-owner/stats' }],
+  superadmin: [{ label: 'Approval queue', href: '/admin' }, { label: 'Metrics', href: '/admin/metrics' }, { label: 'Venues', href: '/admin/venues' }, { label: 'Users', href: '/admin/users' }],
 }
 
 export default function AppShell({ role, children }: { role: Role; children: ReactNode }) {

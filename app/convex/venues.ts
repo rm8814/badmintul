@@ -59,7 +59,11 @@ export const listMyVenues = query({
   args: {},
   handler: async (ctx) => {
     const ownerId = await requireVenueOwner(ctx);
-    return await ctx.db.query("venues").withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId)).collect();
+    const venues = await ctx.db.query("venues").withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId)).collect();
+    return await Promise.all(venues.map(async (venue) => ({
+      ...venue,
+      courts: await ctx.db.query("courts").withIndex("by_venueId", (q) => q.eq("venueId", venue._id)).collect(),
+    })));
   },
 });
 
@@ -100,6 +104,23 @@ export const removeCourtBlock = mutation({
     if (!block) throw new Error("Court block not found");
     await requireOwnedCourt(ctx, block.courtId);
     await ctx.db.delete(args.blockId);
+  },
+});
+
+export const listBlocksForMyVenues = query({
+  args: {},
+  handler: async (ctx) => {
+    const ownerId = await requireVenueOwner(ctx);
+    const venues = await ctx.db.query("venues").withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId)).collect();
+    const blocks = [];
+    for (const venue of venues) {
+      const courts = await ctx.db.query("courts").withIndex("by_venueId", (q) => q.eq("venueId", venue._id)).collect();
+      for (const court of courts) {
+        const courtBlocks = await ctx.db.query("courtBlocks").withIndex("by_court_and_start", (q) => q.eq("courtId", court._id)).collect();
+        blocks.push(...courtBlocks.map((block) => ({ ...block, courtName: court.name, venueName: venue.name })));
+      }
+    }
+    return blocks.sort((a, b) => a.startTime - b.startTime);
   },
 });
 

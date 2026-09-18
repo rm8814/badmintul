@@ -24,4 +24,34 @@ describe('Task 6 superadmin boundary', () => {
     await admin.mutation(api.admin.setVenueApproval, { venueId, status: 'approved' })
     expect((await admin.query(api.admin.listPendingVenues, {})).map((venue) => venue._id)).not.toContain(venueId)
   })
+
+  it('lists all venue statuses for superadmins and enforces suspension in public browse', async () => {
+    const t = convexTest(schema, modules)
+    const ownerId = await t.run((ctx) => ctx.db.insert('users', { email: 'all-venues-owner@example.com', role: 'venueOwner' }))
+    const adminId = await t.run((ctx) => ctx.db.insert('users', { email: 'all-venues-admin@example.com', role: 'superadmin' }))
+    const venueId = await t.run((ctx) => ctx.db.insert('venues', { ownerId, name: 'Rejected venue', address: 'Address', description: '', photos: [], approvalStatus: 'rejected' }))
+    const approvedId = await t.run((ctx) => ctx.db.insert('venues', { ownerId, name: 'Approved venue', address: 'Address', description: '', photos: [], approvalStatus: 'approved' }))
+    const player = t.withIdentity({ subject: ownerId })
+    await expect(player.query(api.admin.listAllVenues, {})).rejects.toThrow('Superadmin role required')
+    const admin = t.withIdentity({ subject: adminId })
+    expect((await admin.query(api.admin.listAllVenues, {})).map((venue) => venue._id)).toEqual(expect.arrayContaining([venueId, approvedId]))
+    await admin.mutation(api.admin.setVenueSuspended, { venueId: approvedId, suspended: true })
+    expect((await t.query(api.venues.listApprovedVenues, {})).map((venue) => venue._id)).not.toContain(approvedId)
+  })
+
+  it('returns only the minimal user moderation shape and rejects non-admins', async () => {
+    const t = convexTest(schema, modules)
+    const ids = await t.run(async (ctx) => ({
+      admin: await ctx.db.insert('users', { email: 'users-admin@example.com', role: 'superadmin', name: 'Admin Name', phone: '123' }),
+      player: await ctx.db.insert('users', { email: 'users-player@example.com', role: 'player', name: 'Player Name', phone: '456', suspended: true }),
+    }))
+    await expect(t.withIdentity({ subject: ids.player }).query(api.admin.listUsers, {})).rejects.toThrow('Superadmin role required')
+    await expect(t.withIdentity({ subject: ids.player }).mutation(api.admin.setUserSuspended, { userId: ids.player, suspended: false })).rejects.toThrow('Superadmin role required')
+    const listed = await t.withIdentity({ subject: ids.admin }).query(api.admin.listUsers, {})
+    const player = listed.find((user) => user._id === ids.player)
+    expect(player).toEqual({ _id: ids.player, email: 'users-player@example.com', role: 'player', suspended: true })
+    expect(Object.keys(player ?? {}).sort()).toEqual(['_id', 'email', 'role', 'suspended'])
+    await t.withIdentity({ subject: ids.admin }).mutation(api.admin.setUserSuspended, { userId: ids.player, suspended: true })
+    await expect(t.withIdentity({ subject: ids.player }).query(api.bookings.listMyBookings, {})).rejects.toThrow('suspended')
+  })
 })

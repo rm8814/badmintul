@@ -44,4 +44,16 @@ describe('Task 23 court availability blocks', () => {
     await t.withIdentity({ subject: player }).mutation(api.bookings.createBooking, { courtId: courtA, startTime: start, endTime: start + 3600000 })
     await expect(t.withIdentity({ subject: ownerA }).mutation(api.venues.createCourtBlock, { courtId: courtA, startTime: start, endTime: start + 3600000 })).rejects.toThrow('existing confirmed booking')
   })
+
+  it('lists only blocks belonging to the current venue owner', async () => {
+    const t = convexTest(schema, modules)
+    const { ownerA, ownerB, courtA, courtB } = await setup(t)
+    const start = Date.now() + 86400000
+    await t.withIdentity({ subject: ownerA }).mutation(api.venues.createCourtBlock, { courtId: courtA, startTime: start, endTime: start + 3600000 })
+    await t.withIdentity({ subject: ownerB }).mutation(api.venues.createCourtBlock, { courtId: courtB, startTime: start, endTime: start + 3600000 })
+    const ownerABlocks = await t.withIdentity({ subject: ownerA }).query(api.venues.listBlocksForMyVenues, {})
+    expect(ownerABlocks).toHaveLength(1)
+    expect(ownerABlocks[0].courtId).toBe(courtA)
+    expect(ownerABlocks[0]).toMatchObject({ courtName: 'A court', venueName: 'A venue' })
+  })
 })
