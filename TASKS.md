@@ -892,3 +892,74 @@ Added 2026-09-19, per direct request: turn the current single-header dashboard l
 3. At a mobile-width viewport with the sidebar open, its nav links **are** reachable via keyboard focus (the fix must not overcorrect into hiding it when it's genuinely open and visible).
 4. Add a test that actually checks focusability (e.g., via a DOM/jsdom-based check or an equivalent behavioral assertion), not a string-match against the exact expression used in the implementation — the prior test (`expect(shell).toContain('aria-hidden={!isNavOpen}')`) passed precisely because it matched the broken code verbatim, which is why this regression wasn't caught.
 5. `npm test` and `npm run build` pass.
+
+---
+
+# Phase 15 — Sidebar Coverage: Expose Existing Backend Gaps
+
+Added 2026-09-19. Found while designing the sidebar menu structure per role: three Convex mutations already exist in the codebase with **zero UI anywhere that calls them** — `cancelBooking` (Task 8), `createCourtBlock`/`removeCourtBlock` (Task 23), and `setVenueSuspended`/`setUserSuspended` (Task 26). This phase gives each role's sidebar a real destination for these, rather than leaving working backend logic stranded with no way to trigger it from the product.
+
+**This phase touches `convex/*.ts` — three new read queries are needed (listing an owner's court blocks, listing all venues for superadmin, listing users for superadmin). Review with the same rigor as Phases 1–7 and Phase 10, not Phase 9/11/14's lighter presentation-only review.** In particular: the new `listUsers` query (Task 49) must be superadmin-gated and must not return more than `email`/`role`/`suspended` — no auth-internal fields. Every new query needs the same ownership/authorization scrutiny as the existing `listMyVenues`/`listBookingsForMyVenues` pattern (CLAUDE.md's review checklist item 2: verify a real negative test, not just UI hiding).
+
+**Ordering:** Task 46 first (no new Convex query, fully self-contained, lowest risk). Task 47 second (one new query, moderate). Tasks 48 and 49 can happen in either order after that — both are superadmin-only additions to `admin.ts`/`venues.ts` of similar shape.
+
+## Task 46 — Player: "My Bookings" section with cancel
+
+**Goal:** Give players a dedicated "My Bookings" sidebar destination with a working Cancel button — `cancelBooking` (Task 8, with its 2-hour-window and ownership checks already correct and tested) currently has no UI trigger anywhere.
+
+**Scope boundaries:**
+- IN: Split `PlayerBrowsePanel.tsx` into a `view` prop (`'browse' | 'bookings'`, matching the existing pattern in `VenueOwnerPanel`/`SuperadminPanel`), add a `/player/bookings` route in `App.tsx`, add "My Bookings" to the player's sidebar nav in `AppShell.tsx`. The bookings view lists the player's own bookings (`listMyBookings`, already used) with a Cancel button on each `confirmed` booking, wired to the existing `cancelBooking` mutation, with a disabled/pending state per the established Task 18 pattern and the server's rejection message (e.g., the 2-hour-window error) surfaced inline on failure.
+- OUT: No changes to `cancelBooking`'s server-side logic — its R-4-adjacent window/ownership checks (Task 8) are already correct and tested; this task only adds a UI trigger. No booking modification/rescheduling (still out of scope per Task 8's own OUT boundary).
+
+**Acceptance criteria:**
+1. `/player/bookings` shows the player's booking history with a Cancel button on cancellable (confirmed, within-window) bookings.
+2. Clicking Cancel calls `cancelBooking`, shows a pending state, and the booking's status updates reactively on success without a manual refresh.
+3. Attempting to cancel outside the allowed window surfaces the server's actual rejection message, not a silent failure or generic error.
+4. "My Bookings" appears as a distinct sidebar nav item for the player role, with correct active-link highlighting.
+5. `npm test` and `npm run build` pass; `git diff --stat app/convex/` shows zero changes (this task adds no new backend logic).
+
+## Task 47 — Venue Owner: Availability/maintenance management
+
+**Goal:** Give venue owners a dedicated "Availability" sidebar destination to actually create and remove court maintenance blocks — `createCourtBlock`/`removeCourtBlock` (Task 23, with correct ownership checks and atomicity against existing bookings) currently have no UI trigger anywhere; players can already *see* blocked slots (`getCourtBlocks` is used in `PlayerBrowsePanel`) but no one can *create* one through the app.
+
+**Scope boundaries:**
+- IN: A new Convex query (e.g. `listBlocksForMyVenues` in `convex/venues.ts`, alongside `createCourtBlock`/`removeCourtBlock`) that returns block records across every court the caller owns — same ownership-derivation pattern as `listBookingsForMyVenues`/`getMyVenueStats` (owner → their venues → their courts), never trusting a client-supplied court id. A new `/venue-owner/availability` view (`view` prop on `VenueOwnerPanel`, new route, new sidebar item) with a form to select one of the owner's own courts, a date, and a start/end time, submitting to `createCourtBlock`; and a list of the owner's existing upcoming blocks with a Remove button wired to `removeCourtBlock`.
+- OUT: No changes to `createCourtBlock`/`removeCourtBlock`'s existing ownership/atomicity logic — this task only adds a read query and UI around the mutations that already exist and are already correct.
+
+**Acceptance criteria:**
+1. A venue owner can create a maintenance block for a court they own via `/venue-owner/availability`; the resulting blocked slot correctly appears in the player-facing availability grid (already wired via `getCourtBlocks` — verify the two connect, don't just check the mutation succeeds).
+2. A venue owner can see and remove their own existing blocks; a negative test confirms an owner cannot see or remove another owner's blocks via the new `listBlocksForMyVenues` query (same rigor as the existing R-8-style tests for `listMyVenues`/`listBookingsForMyVenues`).
+3. Attempting to block a slot with an existing confirmed booking is still rejected (Task 23's existing check) and the rejection is surfaced in the UI, not swallowed.
+4. "Availability" appears as a distinct sidebar nav item for the venue owner role.
+5. `npm test` and `npm run build` pass.
+
+## Task 48 — Superadmin: Venue moderation view
+
+**Goal:** Give superadmins a dedicated "Venues" sidebar destination showing every venue regardless of approval status, with working suspend/unsuspend — `setVenueSuspended` (Task 26, already correctly enforced server-side in `listApprovedVenues`/`getApprovedVenue`) currently has no UI trigger anywhere.
+
+**Scope boundaries:**
+- IN: A new superadmin-only Convex query (e.g. `listAllVenues` in `convex/admin.ts`) returning every venue regardless of `approvalStatus`, gated by the existing `requireSuperadmin` helper. A new `/admin/venues` view (`view` prop on `SuperadminPanel`, new route, new sidebar item) listing every venue with its status and a suspend/unsuspend toggle wired to the existing `setVenueSuspended` mutation.
+- OUT: No change to the existing approval queue (Task 6) — this is an additional broader view, not a replacement. No venue-detail editing.
+
+**Acceptance criteria:**
+1. A superadmin can see all venues (any approval status, including already-approved and rejected ones) at `/admin/venues`.
+2. A superadmin can suspend/unsuspend a venue from this view; verify end-to-end that a suspended venue disappears from `listApprovedVenues` (Task 26's existing enforcement — confirm the new UI trigger actually reaches it, don't just assume).
+3. A non-superadmin cannot call the new `listAllVenues` query — explicit negative test, same pattern as `listPendingVenues`'s existing coverage.
+4. "Venues" appears as a distinct sidebar nav item for the superadmin role.
+5. `npm test` and `npm run build` pass.
+
+## Task 49 — Superadmin: User moderation view
+
+**Goal:** Give superadmins a dedicated "Users" sidebar destination to see and moderate users — `setUserSuspended` (Task 26, already correctly enforced server-side across every role-check helper) currently has no UI trigger anywhere, and there is currently no query that returns individual user records at all (only aggregate counts via `getMetrics`).
+
+**Scope boundaries:**
+- IN: A new superadmin-only Convex query (e.g. `listUsers` in `convex/admin.ts`) returning every user's `email`, `role`, and `suspended` status — deliberately minimal, no other fields. A new `/admin/users` view (`view` prop on `SuperadminPanel`, new route, new sidebar item) listing users with a suspend/unsuspend toggle wired to the existing `setUserSuspended` mutation.
+- OUT: No role editing, no user deletion, no invitation/creation flow — visibility plus suspend/unsuspend only, matching Task 26's original scope exactly. No fields beyond `email`/`role`/`suspended` in the query's return shape.
+
+**Acceptance criteria:**
+1. A superadmin can see all users (email, role, suspended status) at `/admin/users`.
+2. A superadmin can suspend/unsuspend a user from this view; verify end-to-end that a suspended user's subsequent privileged calls are rejected (Task 26's existing enforcement — confirm the new UI trigger actually reaches it).
+3. A non-superadmin cannot call `listUsers` or `setUserSuspended` — explicit negative test.
+4. `listUsers`'s returned shape is spot-checked to confirm it contains only `email`/`role`/`suspended` (plus the document id), not any other field from the `users` table.
+5. "Users" appears as a distinct sidebar nav item for the superadmin role.
+6. `npm test` and `npm run build` pass.
