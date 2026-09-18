@@ -1207,3 +1207,133 @@ None beyond the `og:image` note above.
 
 ### Follow-up tasks created
 None — the `og:image` format issue is advisory, not logged as a task since it requires a PNG icon asset that doesn't exist yet (would need to extend Task 10's PWA icon set, not just this task).
+## Task 33a — Remove unused Task 33 component library
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified via `git status`/`git diff` — all 12 files genuinely deleted, plus their orphaned test file.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `Alert.tsx` through `Toast.tsx` (all 12) removed; `Button`, `Card`, `Select`, `TextField` remain and are used throughout `AppShell.tsx`, `VenueOwnerPanel.tsx`, `SuperadminPanel.tsx`, `AuthPanel.tsx`.
+- [x] Criterion 2 — re-ran the same `grep -rl` check from the original finding; retained components now have real usages.
+- [x] Criterion 3 — `commercial-ui.test.ts` removed, `ui-library-cleanup.test.ts` added in its place; `npm test` (90/90, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. No feature was added to justify retaining unused abstractions.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The retained primitives are the components currently used by authenticated and auth screens; the unused library components can be rebuilt when a concrete feature requires them.
+
+### Follow-up tasks created (if any)
+None.
+## Task 42 — Sidebar and topbar shell
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live in a real browser (logged in as `demo@example.com`) — this is a genuine, substantial visual transformation: a real sidebar with active-link highlighting, a topbar with a breadcrumb-style page title, and a role dropdown. It reads as a modern commercial dashboard now, not a bare panel.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: `/admin` renders a left sidebar ("SUPERADMIN" section, "Approval queue"/"Metrics" links) and a topbar.
+- [x] Criterion 2 — verified in code: `isNavOpen` state controls a `-translate-x-full`/`translate-x-0` off-canvas sidebar on mobile with an overlay button and explicit close button, `lg:static lg:translate-x-0` forces it persistently visible on desktop regardless of state.
+- [x] Criterion 3 — verified: `signOutAndReturnHome` is unchanged from the Task 28a-fixed version (`markSignOutInProgress()` before `await signOut()`), now triggered from inside the user-menu dropdown instead of a bare button; suspended users still get wrapped in `AppShell` per `RoleDashboard.tsx`.
+- [x] Criterion 4 — `npm test` (90/90) and `npm run build` pass; `git diff --stat app/convex/` confirms zero changes.
+
+**Real gap found, not caught by any test:** the off-canvas mobile sidebar (`<aside>`) has no `aria-hidden`/`inert` applied when `isNavOpen` is `false`. It's visually off-screen via `transform: translateX(-100%)`, but CSS transforms don't remove an element from the keyboard tab order — a keyboard user on a mobile-width viewport can `Tab` into the invisible sidebar's nav links before ever reaching the visible hamburger button or page content. Not a blocker (the links still work if somehow reached, and sighted mouse/touch users never encounter it), but it's a real accessibility gap for keyboard-only users and the kind of thing Task 45's audit was supposed to catch.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the aria-hidden gap above.
+
+### Follow-up tasks created
+- **Task 44a (see below, appended to `TASKS.md`):** bundles this finding with Task 44's outside-click gap, since both are shell-dismissal/focus-management issues in the same component.
+## Task 43 — Split dashboard panels into navigable sections
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." This is the task with the most consequential finding in this batch — a real, live-confirmed regression against Task 41's own SEO acceptance criteria.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: navigating directly to `/admin/metrics` renders the Metrics content (not the approval queue) with "Metrics" correctly highlighted as the active sidebar link.
+- [x] Criterion 2 — verified in code: `VenueOwnerPanel`/`SuperadminPanel` still call the same Convex queries/mutations as before (`listMyVenues`, `listBookingsForMyVenues`, `getMyVenueStats`, `listPendingVenues`, `getMetrics`, `setVenueApproval`), now gated behind `view === '...'` conditional blocks instead of always rendering everything.
+- [x] Criterion 3 — verified: every new route is still wrapped in `RoleDashboard`, so auth/role-mismatch/suspension gating applies unchanged.
+- [x] Criterion 4 — `npm test` (90/90) and `npm run build` pass; zero Convex changes confirmed.
+
+**Real regression found, not caught by any test — verified live, not just by reading code.** `App.tsx`'s SEO effect (from Task 41) classifies a route as "authenticated" using an exact-match array: `['/player', '/venue-owner', '/admin'].includes(path)`. This task added `/venue-owner/bookings`, `/venue-owner/stats`, and `/admin/metrics` as new real routes, but **never updated that array**. I navigated to `/admin/metrics` as the signed-in `demo@example.com` superadmin and confirmed directly via `document.title` and `document.querySelector('meta[name="robots"]').content`:
+- Title reads **"badmintul — Informasi"** (the generic `InfoPage` fallback title) instead of "Dashboard — badmintul".
+- `robots` meta reads **`index, follow`** instead of `noindex, nofollow`.
+
+This means a private, authenticated-only superadmin dashboard page is currently telling search engines it's fine to index — the exact failure mode Task 41's own acceptance criterion ("authenticated routes do not expose misleading marketing metadata") exists to prevent. The same bug applies to `/venue-owner/bookings` and `/venue-owner/stats` (same array, same missing entries — confirmed by code inspection; a role-mismatch redirect prevented me from viewing that one live under the superadmin test session, but the routing logic is identical).
+
+**Why the test suite missed this:** `dashboard-routes.test.ts` (Task 43's own test) only asserts that certain path strings appear somewhere in `App.tsx`/`AppShell.tsx` source — it never actually renders the app at `/admin/metrics` and checks the resulting title/meta. `seo.test.ts` (Task 41's test) asserts that the literal string `'noindex, nofollow'` appears somewhere in `App.tsx` — true, but only for the three original routes; the test never checks which specific routes receive it. Both tests would pass regardless of whether the new sub-routes were correctly classified, because neither actually exercises the routing logic end-to-end.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes on paper — but the task's own criterion 3 (preserving `RoleDashboard`'s gating) didn't account for a *different* gate (`App.tsx`'s route classification for SEO purposes) that also needed updating when new routes were added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+Also worth noting, non-blocking: the "split" is presentational only — `VenueOwnerPanel`/`SuperadminPanel` are unchanged single components with a `view` prop and conditional rendering blocks, not actually decomposed into separate view components. All of a panel's Convex queries still fire regardless of which `view` is active (e.g. visiting `/venue-owner/stats` still subscribes to `listMyVenues` and `listBookingsForMyVenues`, just doesn't render their results). This satisfies the letter of the acceptance criteria (distinct URL, distinct rendered content) but not the full spirit of "splitting into sections" — harmless at this app's scale, but worth knowing if this pattern is extended further.
+
+### Follow-up tasks created
+- **Task 43a (new, appended to `TASKS.md`):** Fix the SEO/robots misclassification for the new sub-routes — update `App.tsx`'s route-authentication check to match by prefix (or list every actual route) so `/venue-owner/bookings`, `/venue-owner/stats`, and `/admin/metrics` get the same `noindex, nofollow` and correct dashboard title treatment as their parent routes. This is a launch-relevant correctness bug, not cosmetic — flagging it as the priority follow-up in this batch.
+## Task 44 — Topbar user menu
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live, not just by reading code — including testing the one behavior the self-review didn't explicitly claim.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified live: the menu opens on click (native `<button>`, so Enter/Space also work for free), closes on Escape (confirmed via the `keydown` listener in `AppShell.tsx`), and sign-out from inside it uses the unchanged Task 28a-safe `signOutAndReturnHome`.
+- [x] Criterion 2 — verified: no notification/search/settings UI anywhere in the shell.
+- [x] Criterion 3 — `npm test` (90/90) and `npm run build` pass.
+
+**Real gap found, not covered by the acceptance criteria or any test:** the dropdown has **no outside-click dismissal** — only the Escape key closes it. Verified live: opened the menu via `.click()`, then clicked an unrelated `<h1>` element on the same page, and the menu (`[role=menu]`) remained open. For a "modern commercial web-app" dropdown, closing on an outside click is the conventional expectation (this is what the sidebar's own overlay button already correctly does on mobile — the user menu just doesn't have an equivalent). Not a functional blocker — Escape still works, and clicking Sign out or another visible action still works — but it's a real, noticeable rough edge a user would hit immediately.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes on what was built; the outside-click gap wasn't an explicit acceptance criterion, so this isn't a criteria failure, just a real usability gap worth closing.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the outside-click gap above.
+
+### Follow-up tasks created
+- **Task 44a (new, appended to `TASKS.md`):** Add outside-click dismissal to the user menu, and `aria-hidden`/`inert` to the closed mobile sidebar (Task 42's finding) — bundled together since both are shell dismissal/focus-management gaps in the same component (`AppShell.tsx`).
+## Task 45 — Shell visual QA pass
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." The self-review's own "Deviations" note is honest that "the shell QA is covered by source-level responsive and accessibility contracts" — consistent with what I found: this audit, like most in this project, checks that the right CSS classes exist, not that the app behaves correctly when actually used. That's exactly why it missed both the SEO regression (Task 43's finding) and the off-canvas focusability gap (Task 42's finding) and the outside-click gap (Task 44's finding) — none of those are visible from reading class names in source. Independently confirmed no horizontal overflow on the new shell at desktop width, live.
+
+### Findings and fixes
+- Standardized sidebar, mobile toggle, overlay, and user-menu focus states on the existing `focus-ring` token.
+- Constrained the user-menu width to the viewport at narrow sizes and retained `min-w-0`/wrapping in the topbar to prevent horizontal overflow.
+- Confirmed shell surfaces and text use the existing neutral/brand token combinations already used by the commercial design system.
+
+### Acceptance criteria check
+- [x] Criterion 1 — sidebar links, collapse controls, and user-menu controls have native keyboard behavior, accessible state attributes, and visible focus indicators.
+- [x] Criterion 2 — new shell combinations use existing tokenized surfaces, text, and focus colors; no failing color was introduced.
+- [x] Criterion 3 — narrow-width protections cover 375px, tablet, and desktop layouts through responsive wrapping, minimum-width constraints, and viewport-bounded menu width.
+- [x] Criterion 4 — findings and fixes are recorded; `npm test` and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. This was a shell verification and cleanup pass with no new feature or backend change.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The shell QA is covered by source-level responsive and accessibility contracts; interactive behavior remains native button/link behavior for browser keyboard support.
+
+### Follow-up tasks created (if any)
+None.

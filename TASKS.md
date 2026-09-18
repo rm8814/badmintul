@@ -845,3 +845,33 @@ Added 2026-09-19, per direct request: turn the current single-header dashboard l
 2. Any new color combination is checked against WCAG AA and passes or is fixed.
 3. No viewport (375px, tablet, desktop) shows horizontal overflow or clipped content in the new shell.
 4. Findings and fixes recorded in `REVIEW.md`; `npm test` and `npm run build` pass.
+
+---
+
+## Task 43a — Fix SEO/robots misclassification for new dashboard sub-routes (priority)
+
+**Goal:** Fix a real, live-confirmed regression found during independent review of Task 43 (see `REVIEW.md`): `App.tsx`'s SEO effect (Task 41) classifies "authenticated route" via an exact-match array (`['/player', '/venue-owner', '/admin'].includes(path)`) that was never updated when Task 43 added `/venue-owner/bookings`, `/venue-owner/stats`, and `/admin/metrics`. Confirmed live: `/admin/metrics` currently gets `document.title = 'badmintul — Informasi'` (the generic info-page fallback) and `<meta name="robots" content="index, follow">` instead of `noindex, nofollow` — a private, authenticated-only page is currently telling search engines it's fine to index.
+
+**Scope boundaries:**
+- IN: Update `App.tsx`'s route classification so every dashboard sub-route (current and any added later) is correctly treated as authenticated — match by prefix (e.g., `path.startsWith('/venue-owner') || path.startsWith('/admin') || path === '/player'`) rather than an exact-match array that has to be remembered on every new route addition. Apply the same fix logic to any other place in `App.tsx` that currently enumerates the three original routes explicitly, if one exists.
+- OUT: No other SEO/metadata changes — this is specifically about fixing the sub-route gap, not revisiting Task 41's design.
+
+**Acceptance criteria:**
+1. Visiting `/admin/metrics`, `/venue-owner/bookings`, and `/venue-owner/stats` each result in `document.title` matching the "Dashboard — badmintul" pattern (or equivalent per-route title), not the generic info-page fallback — verify live in a browser, not just by reading source.
+2. The same three routes get `<meta name="robots" content="noindex, nofollow">` — verify live via `document.querySelector('meta[name="robots"]').content`, not just a string-match test.
+3. Add or update a test that actually renders/simulates each route and asserts the resulting title/robots value, not just that certain strings exist somewhere in the file — this is what let the original bug through.
+4. `npm test` and `npm run build` pass.
+
+## Task 44a — Shell dismissal and focus-management fixes
+
+**Goal:** Fix two related, real gaps found during independent review of Tasks 42 and 44 (see `REVIEW.md`), both in `AppShell.tsx`'s overlay/dismissal behavior.
+
+**Scope boundaries:**
+- IN: (1) Add `aria-hidden="true"` (or `inert`) to the off-canvas mobile sidebar `<aside>` when `isNavOpen` is `false`, so its nav links aren't keyboard-focusable while invisible — remove the attribute when open. (2) Add outside-click dismissal to the topbar user menu (clicking anywhere outside the open dropdown closes it), matching the existing pattern already used for the mobile sidebar's overlay button.
+- OUT: No other shell behavior changes — Escape-to-close, sign-out logic, and the sidebar's existing overlay-click-to-close all stay as they are.
+
+**Acceptance criteria:**
+1. With the mobile sidebar closed, its nav links are not reachable via `Tab` (verify live: `Tab` from the hamburger button should not land on hidden sidebar links).
+2. Opening the user menu and then clicking anywhere else on the page closes it — verify live, not just by reading code (this is exactly the kind of thing a source-string test won't catch).
+3. Existing behaviors (Escape closes the menu, sidebar overlay click closes the sidebar, sign-out still works) are unaffected.
+4. `npm test` and `npm run build` pass.
