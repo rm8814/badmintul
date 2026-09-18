@@ -13,7 +13,7 @@ describe('Tasks 43a and 44a follow-up fixes', () => {
   })
 
   it('protects the closed sidebar and dismisses the user menu outside its boundary', () => {
-    expect(shell).toContain('aria-hidden={!isNavOpen}')
+    expect(shell).toContain('shouldInertSidebar(isDesktop, isNavOpen)')
     expect(shell).toContain('userMenuRef.current.contains')
     expect(shell).toContain("event.key === 'Escape'")
     expect(shell).toContain("window.addEventListener('pointerdown'")
