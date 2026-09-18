@@ -1367,3 +1367,27 @@ Task 43a's fix and its test are a genuine improvement in this project's testing 
 
 ### Follow-up tasks created
 - **Task 44b (new, appended to `TASKS.md`):** Fix the sidebar's hidden-state accessibility for real — condition `aria-hidden`/`inert` on whether the sidebar is genuinely off-screen (mobile viewport AND closed), not on `isNavOpen` alone, and use `inert` rather than `aria-hidden` so focus is actually blocked, not just hidden from the accessibility tree while remaining tabbable. Verify live with `element.focus(); document.activeElement === element` at both mobile and desktop widths, not just a source-string check.
+## Task 44b — Sidebar hidden-state accessibility
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." This is a genuinely correct fix, and the test quality is a real step up — worth calling out as the model for how this class of fix should be tested going forward.
+
+### Acceptance criteria check
+- [x] **Criterion 1 — verified live, the severe regression is fixed.** At 1536px width (the same viewport where I previously found `aria-hidden="true"` permanently applied), `document.querySelector('aside').inert` is now `false`. Also re-confirmed the sidebar is still genuinely usable there: `link.focus()` on a sidebar link succeeds (`document.activeElement === link`) — the fix didn't overcorrect into making the desktop sidebar non-interactive.
+- [x] Criterion 2 — verified via the exported `shouldInertSidebar(isDesktop, isNavOpen)` pure function and its dedicated test (`sidebar-focus.test.ts`): `shouldInertSidebar(false, false) === true` (mobile, closed → inert), matching the real HTML `inert` attribute now used instead of `aria-hidden` — the mechanism that actually removes descendants from the tab order, per the original task's own correct suggestion.
+- [x] Criterion 3 — verified via the same test: `shouldInertSidebar(false, true) === false` (mobile, open → not inert) and `shouldInertSidebar(true, *) === false` (desktop, either state → never inert). Escape/overlay/outside-click/sign-out are untouched in the diff.
+- [x] **Criterion 4 — this is the one I want to highlight.** `sidebar-focus.test.ts` tests the actual decision function against all four points in the desktop×open state matrix, with real boolean assertions — not a string-match against implementation text. This is a direct, correct response to my prior review's specific complaint ("a test that actually checks focusability... not a string-match against the exact expression used in the implementation — the prior test... passed precisely because it matched the broken code verbatim"). The old broken assertion in `followup-shell-fixes.test.ts` was also updated rather than left stale.
+- [x] Criterion 5 — `npm test` (93/93, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — sidebar focus management only.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+Could not force a true mobile-width viewport live this session (the browser-automation `resize_window` tool didn't take effect, same tooling limitation noted in earlier reviews) — so criterion 2's mobile-closed case is verified via the unit-tested pure function and code inspection rather than a live DOM check at mobile width. Given the pure function is simple, directly tested across its full input domain, and the only thing gating the actual `inert` attribute in the JSX, I'm treating this as sufficient verification rather than a gap — the desktop case (the one with the severe regression) was verified live, which was the priority.
+
+### Follow-up tasks created
+None. This closes out Phase 14's known issues — no open code-fixable defects remain in this batch.
