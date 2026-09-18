@@ -641,3 +641,144 @@ Added 2026-09-18, after dogfooding the app live in a browser for the first time 
 1. Clicking Sign out from any dashboard route reliably lands on `/`, not `/login`, verified by repeating the sign-out flow multiple times (a race condition may not reproduce every single time — confirm it's actually fixed, not just working once).
 2. The role-mismatch and unauthenticated-visitor redirects in `RoleDashboard.tsx` (unrelated to sign-out) continue to work unchanged.
 3. `npm test` and `npm run build` pass.
+
+# Phase 12 — Commercial Design System
+
+Added 2026-09-18 after the functional review found that the product still presents as separate functional panels rather than one commercial interface. Complete this phase before redesigning public conversion screens.
+
+**Ordering:** 32 → 33 → 34 → 35.
+
+## Task 32 — Commercial design tokens
+
+**Goal:** Establish a complete visual language for the product.
+
+**IN:** Extend the central theme with spacing, typography, surfaces, borders, radii, shadows, focus, semantic status, and responsive tokens while retaining accessible violet/cyan branding.
+
+**OUT:** No screen redesign and no component-library dependency.
+
+**Acceptance criteria:**
+1. Tokens are centralized and cover all listed visual categories.
+2. Existing brand colors remain compatible with current components and WCAG AA usage.
+3. `npm test` and `npm run build` pass.
+
+## Task 33 — Shared commercial UI components
+
+**Goal:** Create reusable pieces for a coherent product interface.
+
+**IN:** Add `PageHeader`, `SectionHeader`, `Badge`, `Alert`, `Modal`, `Drawer`, `EmptyState`, `Skeleton`, `Tabs`, `StatCard`, `DataTable`, and `Toast` under `app/src/components/ui/`.
+
+**OUT:** No new business logic, Convex functions, or screen-specific data queries.
+
+**Acceptance criteria:**
+1. Components have focused APIs and use shared tokens.
+2. Interactive components provide keyboard focus, disabled, and error states where applicable.
+3. Meaningful tests cover the component groups; `npm test` and `npm run build` pass.
+
+## Task 34 — Responsive application layout system
+
+**Goal:** Make public pages and role dashboards use consistent page, content, section, and panel layouts.
+
+**IN:** Apply shared layout primitives, max widths, gutters, section spacing, card grids, and mobile behavior to existing public and authenticated routes.
+
+**OUT:** No new product features or Convex data-access changes.
+
+**Acceptance criteria:**
+1. Public and authenticated routes use consistent gutters and content widths.
+2. Layouts work at 375px, tablet, and desktop widths without horizontal scrolling.
+3. Repeated patterns use reusable classes/components; tests and build pass.
+
+## Task 35 — Commercial visual QA pass
+
+**Goal:** Verify the design foundation before public conversion redesign.
+
+**IN:** Review all existing routes at desktop, tablet, and 375px widths; fix visual inconsistencies, overflow, contrast, focus, and spacing issues introduced by Tasks 32–34.
+
+**OUT:** No analytics, copywriting strategy, or new workflow features.
+
+**Acceptance criteria:**
+1. Routes share consistent typography, surfaces, spacing, controls, and status treatments.
+2. No tested viewport clips content or interactive controls.
+3. Findings and fixes are recorded in `REVIEW.md`; tests and build pass.
+
+---
+
+# Phase 13 — Public Marketing and Conversion
+
+Added 2026-09-18. Turn the landing experience into a clear commercial entry point for players and venue owners using Phase 12's visual system.
+
+**Ordering:** 36 → 37 → 38 → 39 → 40 → 41.
+
+## Task 36 — Conversion-focused landing hero
+
+**Goal:** Make the product value and next action immediately clear.
+
+**IN:** Redesign the hero with one primary CTA, one secondary CTA, concise value proposition, and responsive visual hierarchy.
+
+**OUT:** No backend search or booking behavior in the hero.
+
+**Acceptance criteria:** The first viewport explains the product, CTAs route correctly, mobile layout is usable, and tests/build pass.
+
+## Task 37 — Player and venue-owner value sections
+
+**Goal:** Explain benefits separately for players and venue owners.
+
+**IN:** Add role-specific benefits, process steps, and CTAs using factual current product behavior.
+
+**OUT:** No unsupported claims or CMS integration.
+
+**Acceptance criteria:** Both roles have clear benefits and CTAs, sections are responsive, and tests/build pass.
+
+## Task 38 — Trust and product proof sections
+
+**Goal:** Reduce hesitation before signup.
+
+**IN:** Add factual booking rules, availability explanation, approval/trust messaging, support promise, and coverage messaging.
+
+**OUT:** No fabricated testimonials, ratings, customer counts, or unsupported performance claims.
+
+**Acceptance criteria:** Trust content is factual, booking expectations are clear, mobile readability is verified, and tests/build pass.
+
+## Task 39 — Public venue discovery cards
+
+**Goal:** Let visitors understand available venue inventory before signup.
+
+**IN:** Improve approved-venue cards with location, pricing or range, availability summary, and trust indicators using existing data.
+
+**OUT:** No unauthenticated booking or new search backend.
+
+**Acceptance criteria:** Only approved/unsuspended venues appear; cards have loading, empty, error, desktop, and mobile states; tests/build pass.
+
+## Task 40 — Footer, support, and policy navigation
+
+**Goal:** Add commercial navigation and support entry points.
+
+**IN:** Add footer links for auth, support/contact, terms, privacy, cancellation policy, and venue-owner information; create pages only where approved copy exists.
+
+**OUT:** No invented legal claims or final policy text without approval.
+
+**Acceptance criteria:** Links resolve, footer is keyboard accessible/responsive, placeholders are clearly marked, and tests/build pass.
+
+## Task 41 — SEO and social sharing readiness
+
+**Goal:** Make public pages discoverable and shareable.
+
+**IN:** Add titles, descriptions, canonical, Open Graph metadata, favicon variants, and appropriate static structured metadata.
+
+**OUT:** No analytics vendor integration or ranking claims.
+
+**Acceptance criteria:** Landing metadata is complete, authenticated routes do not expose misleading marketing metadata, production output contains the metadata, and tests/build pass.
+
+---
+
+## Task 33a — Remove or wire up the unused Task 33 component library
+
+**Goal:** Fix a real gap found during independent review of Task 33 (see `REVIEW.md`): 12 components (`PageHeader`, `SectionHeader`, `Badge`, `Alert`, `Modal`, `Drawer`, `EmptyState`, `Skeleton`, `Tabs`, `StatCard`, `DataTable`, `Toast`) were built and tested in isolation, but Tasks 34–41 — which were supposed to consume them — instead restyled every screen with raw Tailwind utility classes. None of the 12 components are imported anywhere in the app (`grep -rl` across `src/pages/` and `src/components/` returns zero matches for each).
+
+**Scope boundaries:**
+- IN: For each of the 12 components, either (a) wire it into a real screen where it concretely improves that screen (e.g., if a task ever needs a confirm-before-destructive-action flow, use `Modal`; if mutation-success feedback is ever added, use `Toast`), or (b) delete it along with its now-orphaned test coverage. Default to deletion unless there's a concrete, near-term consumer — per this project's established convention of not building for hypothetical future need.
+- OUT: No new features that only exist to justify keeping a component — that would be scope creep in the other direction. If nothing currently needs `DataTable`, `Drawer`, etc., delete them; they can be rebuilt cheaply later when an actual screen needs them.
+
+**Acceptance criteria:**
+1. Every component under `app/src/components/ui/` is imported by at least one real screen, or has been removed.
+2. `grep -rl` for each retained component's name across `src/pages/` and `src/components/` (excluding the component's own file) returns at least one match.
+3. `npm test` and `npm run build` pass, with no orphaned test files left for deleted components.

@@ -963,3 +963,247 @@ The fix relies on an unreset module-level flag, which Codex's own note flags hon
 
 ### Follow-up tasks created
 None now — the technical-debt note above is not actionable until/unless a routing migration is ever proposed; recorded here so it isn't rediscovered from scratch at that point.
+## Process note on Tasks 32–41 (Phases 12–13)
+
+**This entire batch — two new phases, ten tasks, all planned and implemented in one pass — was self-authored by Codex, not assigned by a human or by Claude Code's planning role, per the user: "i accidentally asked codex to plan phases and tasks to work on visual."** Per `CLAUDE.md`, planning phases/tasks is Claude Code's role and Codex is the implementer; per `TASKS.md`'s own global rules, tasks are meant to be done "in order," with a `REVIEW.md` entry filled out "before moving to the next task" — ten tasks landing at once, unreviewed between each, is the same batching pattern flagged as a process violation back in the Task 2 review (which covered Tasks 1–12 landing in one undifferentiated pass). Codex did keep the good habit of marking every entry "Pending independent review" rather than self-certifying, and the task briefs it wrote for itself are reasonably well-scoped (clear IN/OUT boundaries, sensible ordering, honest constraints like "no invented legal claims"). On the merits, I'm accepting this plan rather than discarding it — see below — but flagging the process gap explicitly: this needs review checkpoints between tasks, not just a well-written review log after the fact.
+
+**Technical verdict:** solid work overall — design tokens are implemented with correct Tailwind v4 syntax, the layout rollout is consistent, the SEO/footer/trust content is honest and responsible (no fabricated legal text, no invented testimonials/ratings). One real quality problem: **Task 33's entire 12-component library is unused dead code** — see that task's entry below. One minor scalability note on Task 39. One cosmetic bug (a misplaced import) found and fixed directly. All 82 tests pass, build is clean, verified live in a browser (title/metadata updates correctly per route, footer links resolve, placeholder policy pages render honestly, no horizontal overflow at desktop width).
+
+## Task 32 — Commercial design tokens
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Independently verified against `index.css`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: `@theme` block adds `--color-surface*`, `--color-border-*`, `--color-content-muted`, `--color-focus-ring`, `--color-status-*`, `--spacing-*`, `--text-*` (with matching `--line-height` pairs, correct Tailwind v4 syntax), `--radius-*`, `--shadow-*`, and `--breakpoint-xs` — all the categories the task brief listed.
+- [x] Criterion 2 — verified: `--color-brand-primary`/`accent`/`success`/`warning`/`danger` (the values independently contrast-checked in Task 21's review) are untouched; only the focus-ring outline color changed from `brand-accent` to the new `focus-ring` token, and I confirmed those are the same hex value (`#0e7490`) — a rename, not a visual change.
+- [x] Criterion 3 — `npm test` (82/82, re-run) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — stylesheet only.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None.
+
+### Follow-up tasks created
+None.
+## Task 33 — Shared commercial UI components
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." The self-review's "Deviations" note says "the new components are available for Tasks 34–41; existing screens are intentionally not migrated in this task" — implying later tasks would consume them. **This did not happen.**
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified: all 12 components exist (`Alert.tsx`, `Badge.tsx`, `DataTable.tsx`, `Drawer.tsx`, `EmptyState.tsx`, `Modal.tsx`, `PageHeader.tsx`, `SectionHeader.tsx`, `Skeleton.tsx`, `StatCard.tsx`, `Tabs.tsx`, `Toast.tsx`), each reasonably compact and using the Task 32 tokens (e.g. `Modal.tsx` genuinely handles Escape-to-close and backdrop-click-to-close; `DataTable.tsx` is a real generic table, not a stub).
+- [x] Criterion 2 — verified in code: the keyboard/dismissal behaviors claimed are actually implemented, not just tested by string-matching (`Modal`'s `useEffect` registers a real `keydown` listener for Escape).
+- [x] Criterion 3 — `npm test` (82/82) and `npm run build` pass.
+
+**Real problem, not caught by the self-review or its own tests:** I ran `grep -rl` across every `.tsx` file in `src/pages/` and `src/components/` for an import of each of these 12 components. **Zero matches for all twelve.** `PageHeader`, `SectionHeader`, `Badge`, `Alert`, `Modal`, `Drawer`, `EmptyState`, `Skeleton`, `Tabs`, `StatCard`, `DataTable`, `Toast` are not used anywhere in the actual application — not in `Landing.tsx`, not in `InfoPage.tsx`, not in any dashboard panel. I then checked whether Tasks 34–41 (which were supposed to consume them, per this task's own note) actually did: they didn't — `Landing.tsx`, `AppShell.tsx`, `RoleDashboard.tsx`, `Home.tsx`, and the shared form controls were all restyled using raw Tailwind utility classes built on the Task 32 tokens directly (`content-container`, `rounded-card`, `border-border-subtle`, etc.), never by importing any of Task 33's components. This is a complete component library built and tested in isolation with **no consumer anywhere in the codebase** — exactly the kind of speculative, premature abstraction this project's own conventions argue against (`CLAUDE.md`: "Don't add features... beyond what the task requires... No half-finished implementations"). It compiles and its own tests pass, so it wasn't caught by `npm test`/`npm run build`, only by actually checking for usage.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes, technically — presentation-only, no Convex changes.
+- Out-of-scope work done anyway: arguably the inverse problem — in-scope work (12 components) that never got integrated anywhere, making the scope boundary check pass while the actual deliverable (per the task's own goal, "reusable pieces for a coherent product interface") wasn't achieved.
+
+### Deviations / notes
+None beyond the dead-code finding above.
+
+### Follow-up tasks created
+- **Task 33a (new, appended to `TASKS.md`):** Either wire each of the 12 components into a real screen where it fits, or delete the ones with no near-term consumer. Recommend deletion by default per this project's established anti-premature-abstraction stance, unless a concrete near-term task already needs a specific one (e.g., `Toast` if a future task adds mutation-success notifications, `Modal` if a future task adds a confirm-before-destructive-action flow) — keep only what's about to be used, not what might be useful someday.
+## Task 34 — Responsive application layout system
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified via `git diff` that `content-container` was genuinely applied to `Landing.tsx`, `Home.tsx`, `AppShell.tsx`, and `RoleDashboard.tsx` consistently — this is the task that actually delivered the layout consistency Task 33's unused components were meant to provide, just via utility classes instead.
+
+### Acceptance criteria check
+- [x] Criterion 1 — added and applied a shared `content-container` utility to auth, landing, shell, and role-dashboard wrappers.
+- [x] Criterion 2 — responsive page padding and full-width container behavior are preserved at 375px, tablet, and desktop widths without introducing fixed narrow dashboard wrappers.
+- [x] Criterion 3 — repeated container and dashboard spacing patterns now use the shared utility; tests and build pass (67 tests across 35 files).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. Layout wrappers and tests changed only; no feature or Convex data-access changes were made.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The existing landing sections retain their section-specific vertical rhythm; the shared container now standardizes their horizontal content bounds and the authenticated shell/dashboard flow.
+
+### Follow-up tasks created (if any)
+None.
+## Task 35 — Commercial visual QA pass
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review" and, per its own "Deviations" note, was honest that this was "code-level responsive and token checks," not full device/browser testing — consistent with what I found. I independently checked live in a browser at desktop width: confirmed `document.documentElement.scrollWidth === clientWidth` (no horizontal overflow) on the landing page. I was not able to complete a live 375px mobile check this session due to browser-automation tooling flakiness (repeated CDP screenshot timeouts unrelated to the app) — this remains an open verification gap, not a known failure.
+
+### Findings and fixes
+- Shared cards and controls still used the pre-commercial radius, border, surface, shadow, and focus classes; they now use `rounded-card`, `rounded-control`, `border-border-*`, `bg-surface`, `shadow-card`, and the centralized focus token.
+- The landing page retained repeated max-width container markup; its main content sections now use the shared `content-container` utility.
+- The authenticated shell header now wraps its role badge and sign-out control safely at narrow widths.
+
+### Acceptance criteria check
+- [x] Criterion 1 — shared controls, cards, shell, landing containers, and status treatments use the commercial design system consistently.
+- [x] Criterion 2 — the responsive QA contract covers shared containers and narrow shell wrapping; no new fixed-width or overflow-prone layout was introduced.
+- [x] Criterion 3 — findings are recorded here and `npm test`/`npm run build` pass (69 tests across 36 files).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. This was a visual consistency and responsive cleanup; no analytics, copywriting strategy, or workflow feature was added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The QA was performed through code-level responsive and token checks; full device/browser matrix testing remains part of the existing physical-device PWA and production-hosting work.
+
+### Follow-up tasks created (if any)
+None.
+## Task 36 — Conversion-focused landing hero
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live in a browser — hero copy is clearer ("Temukan waktu main yang pas, tanpa drama"), CTAs route to `/signup` correctly, visually polished.
+
+### Acceptance criteria check
+- [x] Criterion 1 — the hero now states the product value clearly and presents one primary player CTA plus a distinct venue-owner CTA.
+- [x] Criterion 2 — both CTAs route to the existing signup flow; no new backend search or booking behavior was added.
+- [x] Criterion 3 — the hero uses responsive grid and CTA classes, with mobile-stacked actions and a compact availability preview.
+- [x] Criterion 4 — `npm test` and `npm run build` pass (71 tests across 37 files).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. The landing hero and its acceptance tests were redesigned; no backend search or booking behavior was added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+The existing landing sections were retained but updated to use the commercial tokens introduced in Tasks 32–35 for visual consistency.
+
+### Follow-up tasks created (if any)
+None.
+## Task 37 — Player and venue-owner value sections
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live: both sections describe real, currently-shipped product behavior (live slots, maintenance blocking from Task 23, revenue/utilization from Task 25) — no forward-looking claims about unbuilt features.
+
+### Acceptance criteria check
+- [x] Criterion 1 — added a player section explaining live slots, clear selection, and confirmed booking history.
+- [x] Criterion 2 — added a venue-owner section explaining submission, maintenance blocking, incoming operations, revenue, and utilization.
+- [x] Criterion 3 — both sections have distinct signup CTAs and collapse from two columns to one on small screens.
+- [x] Criterion 4 — `npm test` and `npm run build` pass (73 tests across 38 files).
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. Content describes existing product behavior; no unsupported claims, CMS, backend, or new feature was added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+none.
+
+### Follow-up tasks created (if any)
+None.
+## Task 38 — Trust and product proof sections
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified no fabricated testimonials/ratings/customer counts exist anywhere in `Landing.tsx` — matches the task's own explicit prohibition and the project's honesty standard already established in Task 40's placeholder pages.
+
+### Acceptance criteria check
+- [x] Criterion 1 — added factual booking rules and explicit WIB availability guidance.
+- [x] Criterion 2 — added venue approval, support, and current coverage messaging without fabricated proof.
+- [x] Criterion 3 — trust content uses responsive cards and readable mobile spacing.
+- [x] Criterion 4 — `npm test` and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. No testimonials, ratings, customer counts, or unsupported performance claims were added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+none.
+
+### Follow-up tasks created (if any)
+None.
+## Task 39 — Public venue discovery cards
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review."
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified in `convex/venues.ts`'s `listApprovedVenues`: still filters `suspended !== true` (Task 26's enforcement untouched), now also returns `courtCount`, `lowestPrice`, `highestPrice` per venue.
+- [x] Criterion 2 — verified live on the landing page.
+- [x] Criterion 3 — present in code (loading/empty/error branches exist in `Landing.tsx`).
+- [x] Criterion 4 — `npm test` (82/82) and `npm run build` pass.
+
+**Minor scalability note, not blocking:** `listApprovedVenues`'s new price/court-count computation issues one `courts` query per venue in a loop (`Promise.all(venues.map(async (venue) => ...))`) — an N+1 query pattern. Not incorrect, and negligible at this project's current scale (a handful of venues), but this is a shared, player-facing, frequently-called query — worth revisiting with a single indexed query or denormalized fields if the venue count ever grows meaningfully. Not logging a task for this now since it's not a correctness issue and the project has no real usage yet to justify the optimization.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the scalability note above.
+
+### Follow-up tasks created
+None — advisory only, see note above.
+## Task 40 — Footer, support, and policy navigation
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Verified live: `/terms`, `/support` (and by extension `/privacy`, `/cancellation`, `/venue-owner-info`) all render via the shared `InfoPage` component with honest "this page is being prepared" placeholder copy — no invented legal text, matching the task's explicit prohibition. Footer links found via `find` resolve to the correct routes registered in `App.tsx`.
+
+### Acceptance criteria check
+- [x] Criterion 1 — added responsive footer links for auth, support/contact, terms, privacy, cancellation, and venue-owner information.
+- [x] Criterion 2 — all destinations resolve through the SPA router.
+- [x] Criterion 3 — unsupported policy content is clearly marked as being prepared; no final legal claims were invented.
+- [x] Criterion 4 — footer navigation is labeled for assistive technology and adapts to mobile layouts.
+- [x] Criterion 5 — `npm test` and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT boundaries: yes. Placeholder pages were created only to make approved navigation destinations resolve.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+none.
+
+### Follow-up tasks created (if any)
+None.
+## Task 41 — SEO and social sharing readiness
+
+**Date completed:** 2026-09-18
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review."
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified in `index.html`: description, canonical, `og:*`, `twitter:*`, and a JSON-LD `WebSite` block all present.
+- [x] Criterion 2 — favicon/PWA icons referenced correctly (unchanged from Task 10).
+- [x] Criterion 3 — verified live: authenticated/auth routes get correctly different `<title>` values and (per code inspection) `noindex, nofollow`, and I confirmed the canonical `<link>` tag exists in the static HTML baseline so `App.tsx`'s effect always finds it to update (`querySelector` returns non-null on every route, not just `/`).
+- [x] Criterion 4 — verified via `npm run build`'s output HTML; `npm test`/`npm run build` pass.
+
+**Minor inaccuracy, not blocking:** `og:image` points at `pwa-icon-512.svg`. Facebook/LinkedIn and some other platforms' link-preview crawlers don't reliably render SVG `og:image` — they generally expect PNG/JPG. Low priority (no PWA PNG icon currently exists to swap in — would need Task 10 revisited to add one), but worth knowing before relying on social share previews looking right.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the `og:image` note above.
+
+### Follow-up tasks created
+None — the `og:image` format issue is advisory, not logged as a task since it requires a PNG icon asset that doesn't exist yet (would need to extend Task 10's PWA icon set, not just this task).
