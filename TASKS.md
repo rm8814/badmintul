@@ -1008,3 +1008,88 @@ Added 2026-09-19. Found while designing the sidebar menu structure per role: thr
 2. A second click while pending does not fire a second mutation call.
 3. Add or update a test that checks the *specific* Venues-view button's rendered output/props, not just that the string `moderationAction !== null` exists somewhere in the file — the prior test passed despite this exact gap because it only checked the string existed anywhere, and it already existed in the Users-view button.
 4. `npm test` and `npm run build` pass.
+
+**Status: on hold** (2026-09-20) — Codex's usage limit is exhausted until tomorrow. Do not hand this off until then. Phase 16 below is planned in the meantime and can be handed off once capacity returns, either before or after Task 47b — they don't conflict.
+
+---
+
+# Phase 16 — Complete Superadmin Dashboard
+
+Added 2026-09-20, per direct request to think through the superadmin dashboard's full function set rather than continuing to patch it piecemeal. Checked against `SPEC.md` §1's actual superadmin story:
+
+> Approve/reject venue owner accounts and their venue listings. View all bookings, all venues, platform-wide metrics... Suspend a venue or user. Configure global settings (booking lead-time limits, cancellation window, supported cities).
+
+Against that: approval queue, metrics, venue moderation, and user moderation are all built (Tasks 6, 48, 49). Two things are missing entirely — **a platform-wide bookings view** (Task 50) and **configurable global settings** (Tasks 51–54, explicitly deferred by Task 6 at the time: "hardcode reasonable defaults as constants for v1... avoid over-building admin config surface not explicitly required" — revisited and reversed by direct request now that the rest of the superadmin surface is more complete).
+
+**This phase touches `convex/*.ts` substantially — new table, new schema field, new enforcement logic added to existing mutations (`cancelBooking`, `createBooking`). Review with Phase 1–7/10 rigor, not Phase 9/11/14's lighter presentation-only review. Task 53 in particular adds a new check to `createBooking`, the same mutation R-4's atomicity guarantee governs — the new check must live inside the same mutation as the existing conflict/block checks, not a separate read-then-write.**
+
+**Ordering:** Task 50 is fully independent of the settings work — do it whenever, first is fine since it's the simplest. Within the settings group: Task 51 first (infrastructure everything else depends on), then 52 (lowest-risk — swaps one hardcoded constant for a settings read), then 53 (new enforcement logic, needs care), then 54 last (schema change, the largest blast radius of the four).
+
+## Task 50 — Superadmin: All Bookings view
+
+**Goal:** Give the superadmin platform-wide booking visibility — `SPEC.md` §1 explicitly lists "view all bookings" as a superadmin capability, and no query or UI for this currently exists anywhere (only per-player and per-venue-owner scoped booking queries exist).
+
+**Scope boundaries:**
+- IN: A new superadmin-only Convex query (e.g. `listAllBookings` in `convex/admin.ts`) returning every booking with enough context to be useful — venue name, court name, player email, start/end time, status (same enrichment pattern already used in `listBookingsForMyVenues`). A new `/admin/bookings` view (`view` prop on `SuperadminPanel`, new route, new sidebar item) listing them.
+- OUT: No filtering/search UI (per this project's established "don't over-invest in search UX" principle from Task 7). No booking modification or cancellation from the admin view — visibility only, matching the read-only pattern already used for the venue owner's "Incoming bookings" view.
+
+**Acceptance criteria:**
+1. A superadmin can see every booking on the platform (not scoped to one venue or player) at `/admin/bookings`, with venue/court/player/time/status context.
+2. A non-superadmin cannot call the new query — explicit negative test, same pattern as the existing `listAllVenues`/`listUsers` coverage.
+3. "All Bookings" appears as a distinct sidebar nav item for the superadmin role.
+4. `npm test` and `npm run build` pass.
+
+## Task 51 — Platform Settings infrastructure
+
+**Goal:** Build the foundation for configurable global settings — a single settings record a superadmin can read and update, replacing the hardcoded constants Tasks 52–54 will wire into.
+
+**Scope boundaries:**
+- IN: A new `platformSettings` table in `convex/schema.ts` — a singleton (expect exactly one document to ever exist), holding `cancellationWindowHours: v.number()`, `bookingLeadTimeDays: v.number()`, `supportedCities: v.array(v.string())`. A `getPlatformSettings` query, readable by any authenticated user (players need `bookingLeadTimeDays` for the booking UI; venue owners need `supportedCities` for venue submission in Task 54) — if no settings document exists yet, return sensible defaults (`cancellationWindowHours: 2`, `bookingLeadTimeDays: 3`, `supportedCities: []`) rather than erroring, so the app works before a superadmin ever visits the settings screen. A superadmin-only `updatePlatformSettings` mutation that creates the singleton if it doesn't exist or patches it if it does. A new `/admin/settings` view (`view` prop on `SuperadminPanel`, new route, new sidebar item "Settings") with a form for all three fields (a simple textarea or repeatable text inputs for the city list is fine — no need for a fancy multi-select).
+- OUT: No per-city or per-venue settings — this is one global record for the whole platform, matching SPEC.md's "supported cities" (plural, one list) framing. No settings history/audit log.
+
+**Acceptance criteria:**
+1. `getPlatformSettings` returns sensible defaults when no record exists, and the actual stored values once a superadmin has saved settings at least once.
+2. A superadmin can update all three settings via `/admin/settings`; a non-superadmin cannot call `updatePlatformSettings` — explicit negative test.
+3. "Settings" appears as a distinct sidebar nav item for the superadmin role.
+4. `npm test` and `npm run build` pass.
+
+## Task 52 — Wire cancellation window into `cancelBooking`
+
+**Goal:** Replace the hardcoded `CANCELLATION_WINDOW_MS = 2 * 60 * 60 * 1000` in `convex/bookings.ts` with a read from the new platform settings, so a superadmin's configured value actually takes effect.
+
+**Scope boundaries:**
+- IN: `cancelBooking` reads `cancellationWindowHours` from `getPlatformSettings` (or an internal equivalent callable from within another mutation) and uses it in place of the hardcoded constant. Existing behavior must be unchanged when settings haven't been configured yet (default of 2 hours matches the current hardcoded value exactly, so no behavior change for anyone until a superadmin actually changes it).
+- OUT: No other change to `cancelBooking`'s logic — ownership check, status check, and the atomicity of the whole mutation stay exactly as they are.
+
+**Acceptance criteria:**
+1. With no settings configured, `cancelBooking`'s behavior is byte-for-byte identical to today (2-hour window) — the existing Task 8 test for this must pass unmodified.
+2. After a superadmin changes `cancellationWindowHours` via `/admin/settings`, a new cancellation attempt respects the new value — write an explicit test that configures a non-default window and confirms the boundary shifts accordingly.
+3. `npm test` and `npm run build` pass.
+
+## Task 53 — Wire booking lead-time into `createBooking` and the player browse UI
+
+**Goal:** Close a real, currently-existing gap: `PlayerBrowsePanel`'s date navigation is clamped to 3 days ahead in the UI (`Math.min(3, offset + 1)`), but `createBooking` itself has **no server-side check at all** — a direct mutation call can book arbitrarily far in the future today. Make the limit configurable and, critically, actually enforce it server-side.
+
+**Scope boundaries:**
+- IN: `createBooking` reads `bookingLeadTimeDays` from platform settings and rejects `startTime` values further in the future than that many days from now, **inside the same mutation as the existing conflict/block checks** — this is a new check added to an R-4-governed mutation, so it must not introduce a separate read-then-write step or any new race window. `PlayerBrowsePanel`'s day-navigation clamp reads the same setting instead of the hardcoded `3`.
+- OUT: No change to the existing booking-conflict or court-block checks, and no change to the cancellation window (Task 52's job). No minimum lead time (e.g., "must book at least N hours before") — SPEC.md's phrasing is about a maximum booking horizon, not a minimum notice period; if that's wanted too, treat it as a separate, explicitly-scoped follow-up rather than assuming it here.
+
+**Acceptance criteria:**
+1. With the default lead time (3 days, matching today's hardcoded UI limit), `createBooking` behavior for in-range bookings is unchanged, and a direct mutation call attempting to book beyond 3 days out is now rejected server-side — write an explicit test proving this (a gap the project didn't have coverage for before, since it wasn't enforced at all).
+2. The existing R-4 concurrent-booking race test (Task 8) still passes unmodified — the new check must not disturb the existing atomicity.
+3. After a superadmin changes `bookingLeadTimeDays`, both the server enforcement and `PlayerBrowsePanel`'s date-navigation limit reflect the new value.
+4. `npm test` and `npm run build` pass.
+
+## Task 54 — Supported cities
+
+**Goal:** Add a `city` field to venues, constrained to a superadmin-managed list of supported cities, per `SPEC.md`'s "supported cities" setting.
+
+**Scope boundaries:**
+- IN: Add `city: v.optional(v.string())` to the `venues` table in `convex/schema.ts` (optional, so existing venue rows without a city don't break — this project has no real production venue data yet, but stay consistent with the project's established non-destructive-migration caution). `createVenueWithCourts` gains a required `city` argument and validates it against `getPlatformSettings().supportedCities`, rejecting submission if the city isn't in the supported list (server-side, not just UI). `VenueOwnerPanel`'s submission form gains a City field, constrained to a `<Select>` populated from the supported-cities list (falling back to a plain text field with a clear message if the list is empty, so venue submission isn't completely blocked before a superadmin ever configures cities).
+- OUT: No city filter/search on the player browse view — matching this project's established "don't over-invest in search UX" principle (Task 7). No retroactive city-assignment flow for existing venues without one.
+
+**Acceptance criteria:**
+1. A venue owner can only submit a venue with a city from the current supported-cities list; submitting an unsupported (or empty, if the list is non-empty) city is rejected server-side, not just hidden in the UI.
+2. If no cities are configured yet, venue submission still works (doesn't hard-block a venue owner because a superadmin hasn't visited Settings yet) — verify this fallback explicitly.
+3. A superadmin can add/remove supported cities via `/admin/settings` (extending Task 51's form), and the change is reflected in the venue submission form's available choices.
+4. `npm test` and `npm run build` pass.
