@@ -1,8 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { getSettingsOrDefaults } from "./settings";
+import { resolveActingUser } from "./impersonation";
+import type { Id } from "./_generated/dataModel";
 
 export const getCourtAvailability = query({
   args: { courtId: v.id("courts"), dayStart: v.number(), dayEnd: v.number() },
@@ -20,22 +21,12 @@ export const getCourtBlocks = query({
   },
 });
 
-async function requirePlayer(ctx: QueryCtx | MutationCtx) {
-  const playerId = await getAuthUserId(ctx);
-  if (!playerId) throw new Error("Authentication required");
-  const user = await ctx.db.get(playerId);
-  if (!user || user.role !== "player") throw new Error("Player role required");
-  if (user.suspended === true) throw new Error("User account is suspended");
-  return playerId;
+async function requirePlayer(ctx: QueryCtx | MutationCtx, asUserId: Id<"users"> | undefined, action: string) {
+  return resolveActingUser(ctx, "player", asUserId, action);
 }
 
-async function requireVenueOwner(ctx: QueryCtx | MutationCtx) {
-  const ownerId = await getAuthUserId(ctx);
-  if (!ownerId) throw new Error("Authentication required");
-  const user = await ctx.db.get(ownerId);
-  if (!user || user.role !== "venueOwner") throw new Error("Venue owner role required");
-  if (user.suspended === true) throw new Error("User account is suspended");
-  return ownerId;
+async function requireVenueOwner(ctx: QueryCtx | MutationCtx, asUserId: Id<"users"> | undefined, action: string) {
+  return resolveActingUser(ctx, "venueOwner", asUserId, action);
 }
 
 async function getOwnedVenueCourts(ctx: QueryCtx | MutationCtx, ownerId: Awaited<ReturnType<typeof requireVenueOwner>>) {
@@ -49,9 +40,9 @@ async function getOwnedVenueCourts(ctx: QueryCtx | MutationCtx, ownerId: Awaited
 }
 
 export const listBookingsForMyVenues = query({
-  args: {},
-  handler: async (ctx) => {
-    const ownerId = await requireVenueOwner(ctx);
+  args: { asUserId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "listBookingsForMyVenues");
     const ownedCourts = await getOwnedVenueCourts(ctx, ownerId);
     const result = [];
     for (const { venue, court } of ownedCourts) {
@@ -63,9 +54,9 @@ export const listBookingsForMyVenues = query({
 });
 
 export const getMyVenueStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const ownerId = await requireVenueOwner(ctx);
+  args: { asUserId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "getMyVenueStats");
     const ownedCourts = await getOwnedVenueCourts(ctx, ownerId);
     const byVenue = new Map<string, { venueId: typeof ownedCourts[number]["venue"]["_id"]; venueName: string; revenue: number; bookedHours: number; openHours: number }>();
     const windowStart = Date.now() - 7 * 86400000;
@@ -87,9 +78,9 @@ export const getMyVenueStats = query({
 });
 
 export const createBooking = mutation({
-  args: { courtId: v.id("courts"), startTime: v.number(), endTime: v.number() },
+  args: { courtId: v.id("courts"), startTime: v.number(), endTime: v.number(), asUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const playerId = await requirePlayer(ctx);
+    const playerId = await requirePlayer(ctx, args.asUserId, "createBooking");
     if (args.endTime <= args.startTime) throw new Error("Booking end time must be after start time");
     const settings = await getSettingsOrDefaults(ctx);
     const maxStart = Date.now() + settings.bookingLeadTimeDays * 86400000;
@@ -105,17 +96,17 @@ export const createBooking = mutation({
 });
 
 export const listMyBookings = query({
-  args: {},
-  handler: async (ctx) => {
-    const playerId = await requirePlayer(ctx);
+  args: { asUserId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const playerId = await requirePlayer(ctx, args.asUserId, "listMyBookings");
     return await ctx.db.query("bookings").withIndex("by_court_and_start").filter((q) => q.eq(q.field("playerId"), playerId)).order("desc").collect();
   },
 });
 
 export const cancelBooking = mutation({
-  args: { bookingId: v.id("bookings") },
+  args: { bookingId: v.id("bookings"), asUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const playerId = await requirePlayer(ctx);
+    const playerId = await requirePlayer(ctx, args.asUserId, "cancelBooking");
     const booking = await ctx.db.get(args.bookingId);
     if (!booking || booking.playerId !== playerId) throw new Error("Booking does not belong to the current player");
     if (booking.status !== "confirmed") throw new Error("Booking is already cancelled");

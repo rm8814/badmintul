@@ -4,8 +4,11 @@ import { useConvexAuth } from '@convex-dev/auth/react'
 import { api } from '../../convex/_generated/api'
 import Button from './ui/Button'
 import Card from './ui/Card'
+import Select from './ui/Select'
+import PlayerBrowsePanel from './PlayerBrowsePanel'
+import VenueOwnerPanel from './VenueOwnerPanel'
 
-export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' | 'bookings' | 'settings' }) {
+export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' | 'bookings' | 'settings' | 'viewAs' }) {
   const { isAuthenticated } = useConvexAuth()
   const user = useQuery(api.roles.getCurrentUser)
   const pending = useQuery(api.admin.listPendingVenues, user?.role === 'superadmin' ? {} : 'skip')
@@ -20,6 +23,9 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
   const updateSettings = useMutation(api.settings.updatePlatformSettings)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [moderationAction, setModerationAction] = useState<string | null>(null)
+  const [viewAsRole, setViewAsRole] = useState<'player' | 'venueOwner'>('player')
+  const [viewAsUserId, setViewAsUserId] = useState('')
+  const impersonatableUsers = useQuery(api.admin.listImpersonatableUsers, user?.role === 'superadmin' && view === 'viewAs' ? { role: viewAsRole } : 'skip')
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [cancellationWindowHours, setCancellationWindowHours] = useState('')
@@ -90,6 +96,16 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
       {settingsError && <p className="text-sm text-red-600">{settingsError}</p>}
       <Button type="submit" disabled={isSavingSettings}>{isSavingSettings ? 'Saving…' : 'Save settings'}</Button>
     </form>}
+    </>}
+    {view === 'viewAs' && <>
+    <h3 className="mt-6 font-semibold">View as</h3>
+    <p className="mt-1 text-sm text-neutral-600">See and act on the platform exactly as a specific player or venue owner sees it. Actions taken here affect their real account and are logged.</p>
+    <div className="mt-3 inline-flex overflow-hidden rounded-control border border-border-strong" role="group" aria-label="Toggle between player and venue owner dashboard">
+      <button type="button" aria-pressed={viewAsRole === 'player'} className={`px-4 py-2 text-sm font-bold ${viewAsRole === 'player' ? 'bg-brand-primary text-white' : 'bg-white text-neutral-700'}`} onClick={() => { setViewAsRole('player'); setViewAsUserId('') }}>Player</button>
+      <button type="button" aria-pressed={viewAsRole === 'venueOwner'} className={`px-4 py-2 text-sm font-bold ${viewAsRole === 'venueOwner' ? 'bg-brand-primary text-white' : 'bg-white text-neutral-700'}`} onClick={() => { setViewAsRole('venueOwner'); setViewAsUserId('') }}>Venue owner</button>
+    </div>
+    <div className="mt-3 max-w-sm">{impersonatableUsers === undefined ? <div className="animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading accounts…</div> : impersonatableUsers.length ? <Select id="view-as-account" label="Account" value={viewAsUserId} onChange={(event) => setViewAsUserId(event.target.value)}><option value="">Select an account</option>{impersonatableUsers.map((candidate) => <option key={candidate._id} value={candidate._id}>{candidate.email}</option>)}</Select> : <p className="text-sm text-neutral-600">No {viewAsRole === 'player' ? 'player' : 'venue owner'} accounts available.</p>}</div>
+    {viewAsUserId && <div className="mt-5">{viewAsRole === 'player' ? <PlayerBrowsePanel asUserId={viewAsUserId} onExitViewAs={() => setViewAsUserId('')} /> : <VenueOwnerPanel asUserId={viewAsUserId} onExitViewAs={() => setViewAsUserId('')} />}</div>}
     </>}
   </Card>
 }

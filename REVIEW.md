@@ -1574,3 +1574,31 @@ None beyond the incomplete Venues-view fix above.
 
 ### Follow-up tasks created
 - None. Recommend the user (or Codex, once quota resets) spot-check the `createBooking`/`cancelBooking` changes in `convex/bookings.ts` given the self-review caveat above.
+
+---
+
+## Task 55 — Superadmin: View As (player / venue owner impersonation)
+
+**Date completed:** 2026-09-20
+**Implemented by:** Claude (directly, not Codex — same explicit deviation as Phase 16, Codex's quota was still exhausted; user chose "full impersonation" and "Claude builds it now" when asked to clarify scope and implementer)
+**Reviewed by:** Claude Code (self-review — same process caveat as the Phase 16 entry above)
+
+### Acceptance criteria check
+- [x] Non-superadmin cannot pass `asUserId` — `resolveActingUser` in `convex/impersonation.ts` throws `'Only superadmins can act on behalf of another user'` before touching the target; verified with a real `convexTest` call (`impersonation.test.ts`, a player attempting `asUserId` on another player).
+- [x] Cannot impersonate a wrong-role target, a suspended target, or act while the superadmin's own account is suspended — three separate explicit negative tests, each asserting the exact thrown message.
+- [x] A superadmin acting as a player creates a booking attributed to the target player's id (verified by reading `booking.playerId` back from the database, not just trusting no error was thrown) and writes exactly one `impersonationLogs` row with `{actorId, targetUserId, action: 'createBooking'}`.
+- [x] A superadmin acting as a venue owner creates a venue attributed to the target owner's id (`venue.ownerId`) and that venue shows up in `listMyVenues` when queried with the same `asUserId`.
+- [x] `listImpersonatableUsers` returns exactly `{_id, email}` (verified via `Object.keys` on the returned object, the same minimal-exposure pattern `listUsers` already established) and excludes a suspended account from the result set.
+- [x] `npm test` (120/120) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. No impersonation of other superadmins is possible (`resolveActingUser` checks `target.role !== role`, and `role` is always `"player"` or `"venueOwner"` at each call site — a superadmin target would fail this check). No impersonation of a suspended account (checked explicitly). R-4's atomicity in `createBooking` is unchanged — the acting-user resolution happens as the very first line of the handler, before the lead-time/conflict/block checks, all still inside the same mutation and `ctx`.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+- **Process deviation, explicitly authorized (repeat of the Phase 16 pattern):** implemented directly by Claude, not Codex, per explicit instruction. Given this is a security-sensitive feature (a superadmin acting as another real user's account), the self-review caveat here is more important than usual — recommend an independent pass (the user's own, or Codex's once quota resets) specifically on `convex/impersonation.ts` and every call site that threads `asUserId` through, since a missed call site would be a silent authorization gap rather than a loud failure.
+- Design note: `asUserId` was added as an argument to every player/venue-owner-scoped query and mutation individually (13 call sites across `bookings.ts` and `venues.ts`) rather than via some global request-context trick, because Convex function args are explicit and statically typed — this keeps each function's authorization surface visible in its own signature instead of hidden in shared middleware.
+- Audit log is write-only in this task — there's no admin UI to read `impersonationLogs` yet. If the user wants to review impersonation history later, that's a small follow-up (a `listImpersonationLogs` superadmin query + a view), not included here since it wasn't asked for.
+
+### Follow-up tasks created
+- None yet. Suggested but not created: an admin-facing view of `impersonationLogs` (currently write-only), if the user wants to audit view-as usage later.

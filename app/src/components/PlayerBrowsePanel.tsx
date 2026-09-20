@@ -7,9 +7,10 @@ import Button from './ui/Button'
 import Card from './ui/Card'
 import Select from './ui/Select'
 
-export default function PlayerBrowsePanel({ view = 'browse' }: { view?: 'browse' | 'bookings' }) {
+export default function PlayerBrowsePanel({ view = 'browse', asUserId, onExitViewAs }: { view?: 'browse' | 'bookings'; asUserId?: string; onExitViewAs?: () => void }) {
   const { isAuthenticated } = useConvexAuth()
   const user = useQuery(api.roles.getCurrentUser)
+  const impersonationArgs = asUserId ? { asUserId: asUserId as never } : {}
   const venues = useQuery(api.venues.listApprovedVenues)
   const settings = useQuery(api.settings.getPlatformSettings)
   const maxDayOffset = settings ? settings.bookingLeadTimeDays : 3
@@ -21,18 +22,19 @@ export default function PlayerBrowsePanel({ view = 'browse' }: { view?: 'browse'
   const availability = useQuery(api.bookings.getCourtAvailability, courtId ? { courtId: courtId as never, dayStart, dayEnd: dayStart + 86400000 } : 'skip')
   const blocks = useQuery(api.bookings.getCourtBlocks, courtId ? { courtId: courtId as never, dayStart, dayEnd: dayStart + 86400000 } : 'skip')
   const createBooking = useMutation(api.bookings.createBooking)
-  const bookings = useQuery(api.bookings.listMyBookings, user?.role === 'player' ? {} : 'skip')
+  const bookings = useQuery(api.bookings.listMyBookings, user?.role === 'player' || asUserId ? impersonationArgs : 'skip')
   const cancelBooking = useMutation(api.bookings.cancelBooking)
   const [pendingCancellation, setPendingCancellation] = useState<string | null>(null)
   const [cancellationError, setCancellationError] = useState('')
-  async function cancel(bookingId: string) { setPendingCancellation(bookingId); setCancellationError(''); try { await cancelBooking({ bookingId: bookingId as never }) } catch (caught) { setCancellationError(caught instanceof Error ? caught.message : 'Could not cancel booking') } finally { setPendingCancellation(null) } }
+  async function cancel(bookingId: string) { setPendingCancellation(bookingId); setCancellationError(''); try { await cancelBooking({ bookingId: bookingId as never, ...impersonationArgs }) } catch (caught) { setCancellationError(caught instanceof Error ? caught.message : 'Could not cancel booking') } finally { setPendingCancellation(null) } }
   const [pendingBooking, setPendingBooking] = useState<number | null>(null)
   async function book(start: number) {
     setPendingBooking(start)
-    try { await createBooking({ courtId: courtId as never, startTime: start, endTime: start + 3600000 }) } finally { setPendingBooking(null) }
+    try { await createBooking({ courtId: courtId as never, startTime: start, endTime: start + 3600000, ...impersonationArgs }) } finally { setPendingBooking(null) }
   }
-  if (!isAuthenticated || user?.role !== 'player') return null
+  if (!asUserId && (!isAuthenticated || user?.role !== 'player')) return null
   return <Card className="w-full max-w-2xl border-brand-accent/30 text-left">
+{asUserId && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-warning/40 bg-brand-warning/10 p-3 text-sm text-brand-warning"><span>Viewing as this player. Actions here affect their real account.</span>{onExitViewAs && <Button variant="secondary" className="px-3 py-1 text-sm" onClick={onExitViewAs}>Exit</Button>}</div>}
 {view === 'browse' ? <><h2 className="text-xl font-semibold text-brand-primary">Browse venues</h2>
     <div className="mt-4">{venues === undefined ? <div className="animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading approved venues…</div> : venues.length ? <Select id="browse-venue" label="Approved venue" value={venueId} onChange={(event) => { setVenueId(event.target.value); setCourtId('') }}><option value="">Select an approved venue</option>{venues.map((venue) => <option key={venue._id} value={venue._id}>{venue.name} — {venue.address}</option>)}</Select> : <div className="rounded-lg border border-dashed border-neutral-300 p-4"><p className="text-neutral-600">No approved venues are available yet.</p><a className="mt-2 inline-block font-semibold text-brand-primary underline" href="/">Return to the home page</a></div>}</div>
     {selectedVenue && <><h3 className="mt-5 font-semibold">{selectedVenue.name} courts</h3><div className="mt-2"><Select id="browse-court" label="Court" value={courtId} onChange={(event) => setCourtId(event.target.value)}><option value="">Select a court</option>{selectedVenue.courts.map((court) => <option key={court._id} value={court._id}>{court.name} — IDR {court.pricePerHour}/hour</option>)}</Select></div></>}

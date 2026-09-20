@@ -7,17 +7,19 @@ import Card from './ui/Card'
 import TextField from './ui/TextField'
 import Select from './ui/Select'
 
-export default function VenueOwnerPanel({ view = 'overview' }: { view?: 'overview' | 'bookings' | 'availability' | 'stats' }) {
+export default function VenueOwnerPanel({ view = 'overview', asUserId, onExitViewAs }: { view?: 'overview' | 'bookings' | 'availability' | 'stats'; asUserId?: string; onExitViewAs?: () => void }) {
   const { isAuthenticated } = useConvexAuth()
   const user = useQuery(api.roles.getCurrentUser)
-  const venues = useQuery(api.venues.listMyVenues, user?.role === 'venueOwner' ? {} : 'skip')
-  const incomingBookings = useQuery(api.bookings.listBookingsForMyVenues, user?.role === 'venueOwner' ? {} : 'skip')
-  const venueStats = useQuery(api.bookings.getMyVenueStats, user?.role === 'venueOwner' ? {} : 'skip')
-  const blocks = useQuery(api.venues.listBlocksForMyVenues, user?.role === 'venueOwner' ? {} : 'skip')
+  const impersonationArgs = asUserId ? { asUserId: asUserId as never } : {}
+  const canQuery = user?.role === 'venueOwner' || !!asUserId
+  const venues = useQuery(api.venues.listMyVenues, canQuery ? impersonationArgs : 'skip')
+  const incomingBookings = useQuery(api.bookings.listBookingsForMyVenues, canQuery ? impersonationArgs : 'skip')
+  const venueStats = useQuery(api.bookings.getMyVenueStats, canQuery ? impersonationArgs : 'skip')
+  const blocks = useQuery(api.venues.listBlocksForMyVenues, canQuery ? impersonationArgs : 'skip')
   const createBlock = useMutation(api.venues.createCourtBlock)
   const removeBlock = useMutation(api.venues.removeCourtBlock)
   const createVenue = useMutation(api.venues.createVenueWithCourts)
-  const settings = useQuery(api.settings.getPlatformSettings, user?.role === 'venueOwner' ? {} : 'skip')
+  const settings = useQuery(api.settings.getPlatformSettings, canQuery ? {} : 'skip')
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [city, setCity] = useState('')
@@ -42,7 +44,7 @@ export default function VenueOwnerPanel({ view = 'overview' }: { view?: 'overvie
     try {
       const startTime = new Date(`${blockDate}T${blockStart}:00+07:00`).getTime()
       const endTime = new Date(`${blockDate}T${blockEnd}:00+07:00`).getTime()
-      await createBlock({ courtId: selectedCourtId as never, startTime, endTime, reason: blockReason })
+      await createBlock({ courtId: selectedCourtId as never, startTime, endTime, reason: blockReason, ...impersonationArgs })
     } catch (caught) {
       setBlockError(caught instanceof Error ? caught.message : 'Could not create maintenance block')
     } finally { setBlockPending(false) }
@@ -50,9 +52,9 @@ export default function VenueOwnerPanel({ view = 'overview' }: { view?: 'overvie
 
   async function deleteBlock(blockId: string) {
     setRemovingBlockId(blockId)
-    try { await removeBlock({ blockId: blockId as never }) } catch (caught) { setBlockError(caught instanceof Error ? caught.message : 'Could not remove maintenance block') } finally { setRemovingBlockId(null) }
+    try { await removeBlock({ blockId: blockId as never, ...impersonationArgs }) } catch (caught) { setBlockError(caught instanceof Error ? caught.message : 'Could not remove maintenance block') } finally { setRemovingBlockId(null) }
   }
-  if (!isAuthenticated || user?.role !== 'venueOwner') return null
+  if (!asUserId && (!isAuthenticated || user?.role !== 'venueOwner')) return null
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -60,7 +62,7 @@ export default function VenueOwnerPanel({ view = 'overview' }: { view?: 'overvie
     setSaved(false)
     setIsSubmitting(true)
     try {
-      await createVenue({ name, address, description: '', photos: [], city, courts: [{ name: courtName, pricePerHour: Number(price), operatingHours: { open: '08:00', close: '22:00' } }] })
+      await createVenue({ name, address, description: '', photos: [], city, courts: [{ name: courtName, pricePerHour: Number(price), operatingHours: { open: '08:00', close: '22:00' } }], ...impersonationArgs })
       setSaved(true)
       setName('')
       setAddress('')
@@ -73,6 +75,7 @@ export default function VenueOwnerPanel({ view = 'overview' }: { view?: 'overvie
   }
 
   return <Card className="w-full max-w-xl border-brand-primary/20 text-left">
+    {asUserId && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-warning/40 bg-brand-warning/10 p-3 text-sm text-brand-warning"><span>Viewing as this venue owner. Actions here affect their real account.</span>{onExitViewAs && <Button variant="secondary" className="px-3 py-1 text-sm" onClick={onExitViewAs}>Exit</Button>}</div>}
     <h2 className="text-xl font-semibold text-brand-primary">Venue owner dashboard</h2>
     {view === 'overview' && <>
     <form id="venue-submission" className="mt-4 flex flex-col gap-3" onSubmit={submit}>

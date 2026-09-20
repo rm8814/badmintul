@@ -51,4 +51,10 @@ export default defineSchema({
     bookingLeadTimeDays: v.number(),
     supportedCities: v.array(v.string()),
   }),
+  impersonationLogs: defineTable({
+    actorId: v.id("users"),
+    targetUserId: v.id("users"),
+    action: v.string(),
+    createdAt: v.number(),
+  }).index("by_actorId", ["actorId"]).index("by_targetUserId", ["targetUserId"]),
 });

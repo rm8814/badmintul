@@ -53,6 +53,13 @@ Each risk is tagged **BLOCKING** (implementation must not proceed past a certain
 
 ---
 
+## R-9 — Superadmin impersonation ("View As") authorization gap
+**Type:** BLOCKING (for Task 55 and any future function added to the player/venue-owner surface)
+**Risk:** Task 55 lets a superadmin act as a real player or venue owner via an `asUserId` arg threaded through every player/venue-owner-scoped Convex function individually (not shared middleware). If a new function is added to that surface later and the author forgets to wire it through `resolveActingUser`/`asUserId`, the failure mode is silent — the function simply won't support "View As" rather than throwing, which is easy to miss in review. A second, distinct failure mode: a bug in `resolveActingUser` itself (e.g., a role-check regression) would let a superadmin act as *any* user, or a non-superadmin impersonate someone, with no client-visible symptom until misuse is noticed.
+**Mitigation:** `resolveActingUser` (`convex/impersonation.ts`) is the single choke point — every impersonation-capable function must call it, never re-implement the check. Every impersonated call is logged to `impersonationLogs` (`actorId`, `targetUserId`, `action`, `createdAt`), giving a forensic trail even if a gap is found later. Review checklist addition: whenever a new player- or venue-owner-scoped Convex function is added, explicitly decide (and note in that task's `REVIEW.md` entry) whether it should support `asUserId` — don't let it be an accidental omission. Task 55 was self-reviewed (Claude implemented and reviewed it, per an authorized process deviation) — an independent pass specifically on `convex/impersonation.ts` and its call sites is recommended once Codex quota resets.
+
+---
+
 ## Summary table
 
 | ID | Risk | Type | Phase it gates |
@@ -65,3 +72,4 @@ Each risk is tagged **BLOCKING** (implementation must not proceed past a certain
 | R-6 | Solo maintainer bus factor | ADVISORY | — |
 | R-7 | Hostinger domain/DNS/HTTPS | BLOCKING | 6 |
 | R-8 | Venue owner data isolation | BLOCKING | 3 |
+| R-9 | Superadmin impersonation authorization gap | BLOCKING | 16 (Task 55) |

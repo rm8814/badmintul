@@ -1,9 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { getSettingsOrDefaults } from "./settings";
+import { resolveActingUser } from "./impersonation";
 
 const courtValidator = v.object({
   name: v.string(),
@@ -11,13 +11,8 @@ const courtValidator = v.object({
   operatingHours: v.object({ open: v.string(), close: v.string() }),
 });
 
-async function requireVenueOwner(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Authentication required");
-  const user = await ctx.db.get(userId);
-  if (!user || user.role !== "venueOwner") throw new Error("Venue owner role required");
-  if (user.suspended === true) throw new Error("User account is suspended");
-  return userId;
+async function requireVenueOwner(ctx: QueryCtx | MutationCtx, asUserId: Id<"users"> | undefined, action: string) {
+  return resolveActingUser(ctx, "venueOwner", asUserId, action);
 }
 
 function validateText(value: string, field: string) {
@@ -32,9 +27,10 @@ export const createVenueWithCourts = mutation({
     photos: v.array(v.string()),
     courts: v.array(courtValidator),
     city: v.string(),
+    asUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const ownerId = await requireVenueOwner(ctx);
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "createVenueWithCourts");
     validateText(args.name, "Venue name");
     validateText(args.address, "Address");
     validateText(args.city, "City");
@@ -63,9 +59,9 @@ export const createVenueWithCourts = mutation({
 });
 
 export const listMyVenues = query({
-  args: {},
-  handler: async (ctx) => {
-    const ownerId = await requireVenueOwner(ctx);
+  args: { asUserId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "listMyVenues");
     const venues = await ctx.db.query("venues").withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId)).collect();
     return await Promise.all(venues.map(async (venue) => ({
       ...venue,
@@ -75,17 +71,17 @@ export const listMyVenues = query({
 });
 
 export const getMyVenue = query({
-  args: { venueId: v.id("venues") },
+  args: { venueId: v.id("venues"), asUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const ownerId = await requireVenueOwner(ctx);
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "getMyVenue");
     const venue = await ctx.db.get(args.venueId);
     if (!venue || venue.ownerId !== ownerId) throw new Error("Venue does not belong to the current owner");
     return venue;
   },
 });
 
-async function requireOwnedCourt(ctx: QueryCtx | MutationCtx, courtId: Id<"courts">) {
-  const ownerId = await requireVenueOwner(ctx);
+async function requireOwnedCourt(ctx: QueryCtx | MutationCtx, courtId: Id<"courts">, asUserId: Id<"users"> | undefined, action: string) {
+  const ownerId = await requireVenueOwner(ctx, asUserId, action);
   const court = await ctx.db.get(courtId);
   if (!court) throw new Error("Court not found");
   const venue = await ctx.db.get(court.venueId);
@@ -94,9 +90,9 @@ async function requireOwnedCourt(ctx: QueryCtx | MutationCtx, courtId: Id<"court
 }
 
 export const createCourtBlock = mutation({
-  args: { courtId: v.id("courts"), startTime: v.number(), endTime: v.number(), reason: v.optional(v.string()) },
+  args: { courtId: v.id("courts"), startTime: v.number(), endTime: v.number(), reason: v.optional(v.string()), asUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    await requireOwnedCourt(ctx, args.courtId);
+    await requireOwnedCourt(ctx, args.courtId, args.asUserId, "createCourtBlock");
     if (args.endTime <= args.startTime) throw new Error("Block end time must be after start time");
     const booking = await ctx.db.query("bookings").withIndex("by_court_and_start", (q) => q.eq("courtId", args.courtId)).filter((q) => q.and(q.eq(q.field("status"), "confirmed"), q.lt(q.field("startTime"), args.endTime), q.gt(q.field("endTime"), args.startTime))).first();
     if (booking) throw new Error("Cannot block a slot with an existing confirmed booking");
@@ -105,19 +101,19 @@ export const createCourtBlock = mutation({
 });
 
 export const removeCourtBlock = mutation({
-  args: { blockId: v.id("courtBlocks") },
+  args: { blockId: v.id("courtBlocks"), asUserId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const block = await ctx.db.get(args.blockId);
     if (!block) throw new Error("Court block not found");
-    await requireOwnedCourt(ctx, block.courtId);
+    await requireOwnedCourt(ctx, block.courtId, args.asUserId, "removeCourtBlock");
     await ctx.db.delete(args.blockId);
   },
 });
 
 export const listBlocksForMyVenues = query({
-  args: {},
-  handler: async (ctx) => {
-    const ownerId = await requireVenueOwner(ctx);
+  args: { asUserId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const ownerId = await requireVenueOwner(ctx, args.asUserId, "listBlocksForMyVenues");
     const venues = await ctx.db.query("venues").withIndex("by_ownerId", (q) => q.eq("ownerId", ownerId)).collect();
     const blocks = [];
     for (const venue of venues) {

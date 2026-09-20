@@ -1103,3 +1103,23 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 2. If no cities are configured yet, venue submission still works (doesn't hard-block a venue owner because a superadmin hasn't visited Settings yet) — verify this fallback explicitly.
 3. A superadmin can add/remove supported cities via `/admin/settings` (extending Task 51's form), and the change is reflected in the venue submission form's available choices.
 4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 55 — Superadmin: View As (player / venue owner impersonation)
+
+**Status: done (2026-09-20)** — implemented directly by Claude (Codex quota still exhausted; user explicitly authorized this deviation, same as Phase 16). See REVIEW.md.
+
+**Goal:** Let a superadmin view and act on the platform exactly as a specific player or venue owner would, via a toggle switch between the two dashboards, per direct user request. This is full impersonation (not read-only preview) — a deliberate, explicitly chosen scope, so every impersonated action must be attributable and auditable.
+
+**Scope boundaries:**
+- IN: A new `impersonationLogs` table recording every impersonated call (`actorId`, `targetUserId`, `action`, `createdAt`). A `resolveActingUser(ctx, role, asUserId?, action)` helper (`convex/impersonation.ts`) used by every player/venue-owner-scoped Convex function via an added optional `asUserId` arg — impersonation is only permitted when the caller is a non-suspended superadmin and the target actually holds the target role and isn't suspended. A new `/admin/view-as` view on `SuperadminPanel` with a toggle switch (Player / Venue owner) and an account picker (backed by a new `listImpersonatableUsers` query returning only `{_id, email}`, excluding suspended accounts), rendering the real `PlayerBrowsePanel`/`VenueOwnerPanel` underneath with a persistent "Viewing as X — Exit" banner.
+- OUT: No impersonation of other superadmins. No ability to impersonate a suspended account (support/debugging on a suspended account should go through the existing moderation views, not this). No changes to the underlying booking/venue logic itself beyond threading the acting-user id through — R-4's atomicity in `createBooking` is untouched (the lead-time/conflict/block checks still run inside one mutation against the resolved acting user id).
+
+**Acceptance criteria:**
+1. A non-superadmin cannot pass `asUserId` to any player/venue-owner-scoped function — explicit negative test.
+2. A superadmin cannot impersonate a user who doesn't hold the target role, or who is suspended, or while the superadmin's own account is suspended — explicit negative tests for each.
+3. A superadmin acting as a player can create/cancel bookings that are correctly attributed to the target player's id, not the superadmin's — explicit test, plus an `impersonationLogs` entry is written for that call.
+4. A superadmin acting as a venue owner can submit venues / manage court blocks correctly attributed to the target owner's id.
+5. The account picker exposes only `{_id, email}` — no other user fields leak into the picker.
+6. `npm test` and `npm run build` pass.

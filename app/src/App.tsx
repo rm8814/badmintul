@@ -39,6 +39,7 @@ function App() {
   if (path === '/admin/users') return <RoleDashboard role="superadmin"><SuperadminPanel view="users" /></RoleDashboard>
   if (path === '/admin/bookings') return <RoleDashboard role="superadmin"><SuperadminPanel view="bookings" /></RoleDashboard>
   if (path === '/admin/settings') return <RoleDashboard role="superadmin"><SuperadminPanel view="settings" /></RoleDashboard>
+  if (path === '/admin/view-as') return <RoleDashboard role="superadmin"><SuperadminPanel view="viewAs" /></RoleDashboard>
   if (path === '/support') return <InfoPage eyebrow="Support" title="Bantuan badmintul" description="Temukan jawaban atau hubungi tim badmintul untuk pertanyaan tentang akun dan booking." />
   if (path === '/terms') return <InfoPage eyebrow="Informasi" title="Syarat dan ketentuan" description="Syarat dan ketentuan penggunaan badmintul akan tersedia di halaman ini." />
   if (path === '/privacy') return <InfoPage eyebrow="Informasi" title="Kebijakan privasi" description="Informasi tentang privasi dan pengelolaan data akan tersedia di halaman ini." />

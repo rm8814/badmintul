@@ -37,6 +37,15 @@ export const listUsers = query({
   },
 });
 
+export const listImpersonatableUsers = query({
+  args: { role: v.union(v.literal("player"), v.literal("venueOwner")) },
+  handler: async (ctx, args) => {
+    await requireSuperadmin(ctx);
+    const users = await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", args.role)).collect();
+    return users.filter((user) => user.suspended !== true).map((user) => ({ _id: user._id, email: user.email }));
+  },
+});
+
 export const listAllBookings = query({
   args: {},
   handler: async (ctx) => {
