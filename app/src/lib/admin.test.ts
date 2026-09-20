@@ -54,4 +54,10 @@ describe('Task 6 superadmin boundary', () => {
     await t.withIdentity({ subject: ids.admin }).mutation(api.admin.setUserSuspended, { userId: ids.player, suspended: true })
     await expect(t.withIdentity({ subject: ids.player }).query(api.bookings.listMyBookings, {})).rejects.toThrow('suspended')
   })
+
+  it('rejects a superadmin attempting to suspend their own account', async () => {
+    const t = convexTest(schema, modules)
+    const adminId = await t.run((ctx) => ctx.db.insert('users', { email: 'self-suspend-admin@example.com', role: 'superadmin' }))
+    await expect(t.withIdentity({ subject: adminId }).mutation(api.admin.setUserSuspended, { userId: adminId, suspended: true })).rejects.toThrow('cannot suspend their own account')
+  })
 })

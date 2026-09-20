@@ -9,6 +9,7 @@ async function requireSuperadmin(ctx: QueryCtx | MutationCtx) {
   const user = await ctx.db.get(userId);
   if (!user || user.role !== "superadmin") throw new Error("Superadmin role required");
   if (user.suspended === true) throw new Error("User account is suspended");
+  return userId;
 }
 
 export const listPendingVenues = query({
@@ -59,7 +60,8 @@ export const setVenueSuspended = mutation({
 export const setUserSuspended = mutation({
   args: { userId: v.id("users"), suspended: v.boolean() },
   handler: async (ctx, args) => {
-    await requireSuperadmin(ctx);
+    const callerId = await requireSuperadmin(ctx);
+    if (args.userId === callerId && args.suspended === true) throw new Error("Superadmins cannot suspend their own account");
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
     await ctx.db.patch(args.userId, { suspended: args.suspended });

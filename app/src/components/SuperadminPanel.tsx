@@ -16,15 +16,18 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
   const setVenueSuspended = useMutation(api.admin.setVenueSuspended)
   const setUserSuspended = useMutation(api.admin.setUserSuspended)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [moderationAction, setModerationAction] = useState<string | null>(null)
   async function approve(venueId: string, status: 'approved' | 'rejected') {
     setPendingAction(`${venueId}:${status}`)
     try { await setApproval({ venueId: venueId as never, status }) } finally { setPendingAction(null) }
   }
   async function toggleSuspended(venueId: string, suspended: boolean) {
-    await setVenueSuspended({ venueId: venueId as never, suspended })
+    setModerationAction(`venue:${venueId}`)
+    try { await setVenueSuspended({ venueId: venueId as never, suspended }) } finally { setModerationAction(null) }
   }
   async function toggleUserSuspended(userId: string, suspended: boolean) {
-    await setUserSuspended({ userId: userId as never, suspended })
+    setModerationAction(`user:${userId}`)
+    try { await setUserSuspended({ userId: userId as never, suspended }) } finally { setModerationAction(null) }
   }
   if (!isAuthenticated || user?.role !== 'superadmin') return null
   return <Card className="w-full max-w-2xl border-brand-primary/20 text-left">
@@ -42,7 +45,7 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
     </>}
     {view === 'users' && <>
     <h3 className="mt-6 font-semibold">All users</h3>
-    {users === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading users…</div> : users.length ? users.map((listedUser) => <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={listedUser._id}><div><p className="font-semibold">{listedUser.email}</p><p className="text-sm text-neutral-600">{listedUser.role}{listedUser.suspended ? ' · Suspended' : ''}</p></div><Button variant={listedUser.suspended ? 'secondary' : 'danger'} onClick={() => void toggleUserSuspended(listedUser._id, !listedUser.suspended)}>{listedUser.suspended ? 'Unsuspend' : 'Suspend'}</Button></div>) : <p className="mt-2 text-neutral-600">No users found.</p>}
+    {users === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading users…</div> : users.length ? users.map((listedUser) => { const isCurrentUser = listedUser._id === user._id; return <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={listedUser._id}><div><p className="font-semibold">{listedUser.email}{isCurrentUser ? ' · Current account' : ''}</p><p className="text-sm text-neutral-600">{listedUser.role}{listedUser.suspended ? ' · Suspended' : ''}</p></div>{isCurrentUser ? <span className="text-sm text-neutral-500">Your account</span> : <Button variant={listedUser.suspended ? 'secondary' : 'danger'} disabled={moderationAction !== null} onClick={() => void toggleUserSuspended(listedUser._id, !listedUser.suspended)}>{moderationAction === `user:${listedUser._id}` ? 'Saving…' : listedUser.suspended ? 'Unsuspend' : 'Suspend'}</Button>}</div> }) : <p className="mt-2 text-neutral-600">No users found.</p>}
     </>}
   </Card>
 }
