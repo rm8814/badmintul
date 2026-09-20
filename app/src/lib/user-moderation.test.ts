@@ -7,7 +7,7 @@ const panelSource = await import('../components/SuperadminPanel?raw').then((modu
 describe('Task 49 superadmin user moderation', () => {
   it('routes and labels the users view', () => {
     expect(appSource).toContain("'/admin/users'")
-    expect(shellSource).toContain("{ label: 'Users', href: '/admin/users' }")
+    expect(shellSource).toContain("{ label: 'Users', href: '/admin/users', icon: UsersIcon }")
     expect(panelSource).toContain("view === 'users'")
   })
 

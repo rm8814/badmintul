@@ -7,7 +7,7 @@ const panelSource = await import('../components/PlayerBrowsePanel?raw').then((mo
 describe('Task 46 player bookings cancellation view', () => {
   it('routes the player bookings destination and highlights it through the shared shell', () => {
     expect(appSource).toContain("'/player/bookings'")
-    expect(shellSource).toContain("{ label: 'My Bookings', href: '/player/bookings' }")
+    expect(shellSource).toContain("{ label: 'My Bookings', href: '/player/bookings', icon: CalendarIcon }")
   })
 
   it('uses the existing cancellation mutation with pending and server-error states', () => {

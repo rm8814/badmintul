@@ -7,7 +7,7 @@ const panelSource = await import('../components/SuperadminPanel?raw').then((modu
 describe('Task 48 superadmin venue moderation', () => {
   it('routes the venues view and exposes the role-specific navigation item', () => {
     expect(appSource).toContain("'/admin/venues'")
-    expect(shellSource).toContain("{ label: 'Venues', href: '/admin/venues' }")
+    expect(shellSource).toContain("{ label: 'Venues', href: '/admin/venues', icon: BuildingIcon }")
     expect(panelSource).toContain("view === 'venues'")
   })
 

@@ -7,7 +7,7 @@ const panelSource = await import('../components/VenueOwnerPanel?raw').then((modu
 describe('Task 47 venue availability management', () => {
   it('routes and labels the owner availability destination', () => {
     expect(appSource).toContain("'/venue-owner/availability'")
-    expect(shellSource).toContain("{ label: 'Availability', href: '/venue-owner/availability' }")
+    expect(shellSource).toContain("{ label: 'Availability', href: '/venue-owner/availability', icon: ClockIcon }")
     expect(panelSource).toContain("view === 'availability'")
   })
 
