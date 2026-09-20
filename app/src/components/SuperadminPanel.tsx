@@ -5,18 +5,48 @@ import { api } from '../../convex/_generated/api'
 import Button from './ui/Button'
 import Card from './ui/Card'
 
-export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' }) {
+export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' | 'bookings' | 'settings' }) {
   const { isAuthenticated } = useConvexAuth()
   const user = useQuery(api.roles.getCurrentUser)
   const pending = useQuery(api.admin.listPendingVenues, user?.role === 'superadmin' ? {} : 'skip')
   const metrics = useQuery(api.admin.getMetrics, user?.role === 'superadmin' ? {} : 'skip')
   const venues = useQuery(api.admin.listAllVenues, user?.role === 'superadmin' && view === 'venues' ? {} : 'skip')
   const users = useQuery(api.admin.listUsers, user?.role === 'superadmin' && view === 'users' ? {} : 'skip')
+  const allBookings = useQuery(api.admin.listAllBookings, user?.role === 'superadmin' && view === 'bookings' ? {} : 'skip')
+  const settings = useQuery(api.settings.getPlatformSettings, user?.role === 'superadmin' && view === 'settings' ? {} : 'skip')
   const setApproval = useMutation(api.admin.setVenueApproval)
   const setVenueSuspended = useMutation(api.admin.setVenueSuspended)
   const setUserSuspended = useMutation(api.admin.setUserSuspended)
+  const updateSettings = useMutation(api.settings.updatePlatformSettings)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [moderationAction, setModerationAction] = useState<string | null>(null)
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [cancellationWindowHours, setCancellationWindowHours] = useState('')
+  const [bookingLeadTimeDays, setBookingLeadTimeDays] = useState('')
+  const [supportedCitiesText, setSupportedCitiesText] = useState('')
+  const [settingsLoadedFor, setSettingsLoadedFor] = useState<string | null>(null)
+  if (settings && settingsLoadedFor !== 'loaded') {
+    setSettingsLoadedFor('loaded')
+    setCancellationWindowHours(String(settings.cancellationWindowHours))
+    setBookingLeadTimeDays(String(settings.bookingLeadTimeDays))
+    setSupportedCitiesText(settings.supportedCities.join(', '))
+  }
+  async function saveSettings() {
+    setSettingsError(null)
+    setIsSavingSettings(true)
+    try {
+      await updateSettings({
+        cancellationWindowHours: Number(cancellationWindowHours),
+        bookingLeadTimeDays: Number(bookingLeadTimeDays),
+        supportedCities: supportedCitiesText.split(',').map((city) => city.trim()).filter(Boolean),
+      })
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Failed to save settings')
+    } finally {
+      setIsSavingSettings(false)
+    }
+  }
   async function approve(venueId: string, status: 'approved' | 'rejected') {
     setPendingAction(`${venueId}:${status}`)
     try { await setApproval({ venueId: venueId as never, status }) } finally { setPendingAction(null) }
@@ -46,6 +76,20 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
     {view === 'users' && <>
     <h3 className="mt-6 font-semibold">All users</h3>
     {users === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading users…</div> : users.length ? users.map((listedUser) => { const isCurrentUser = listedUser._id === user._id; return <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={listedUser._id}><div><p className="font-semibold">{listedUser.email}{isCurrentUser ? ' · Current account' : ''}</p><p className="text-sm text-neutral-600">{listedUser.role}{listedUser.suspended ? ' · Suspended' : ''}</p></div>{isCurrentUser ? <span className="text-sm text-neutral-500">Your account</span> : <Button variant={listedUser.suspended ? 'secondary' : 'danger'} disabled={moderationAction !== null} onClick={() => void toggleUserSuspended(listedUser._id, !listedUser.suspended)}>{moderationAction === `user:${listedUser._id}` ? 'Saving…' : listedUser.suspended ? 'Unsuspend' : 'Suspend'}</Button>}</div> }) : <p className="mt-2 text-neutral-600">No users found.</p>}
+    </>}
+    {view === 'bookings' && <>
+    <h3 className="mt-6 font-semibold">All bookings</h3>
+    {allBookings === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading bookings…</div> : allBookings.length ? allBookings.map((booking) => <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={booking._id}><div><p className="font-semibold">{booking.venueName} · {booking.courtName}</p><p className="text-sm text-neutral-600">{new Date(booking.startTime).toLocaleString()} – {new Date(booking.endTime).toLocaleString()}</p><p className="text-sm text-neutral-600">{booking.playerEmail} · {booking.status}</p></div></div>) : <p className="mt-2 text-neutral-600">No bookings found.</p>}
+    </>}
+    {view === 'settings' && <>
+    <h3 className="mt-6 font-semibold">Platform settings</h3>
+    {settings === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading settings…</div> : <form className="mt-3 space-y-4" onSubmit={(event) => { event.preventDefault(); void saveSettings() }}>
+      <label className="block text-sm font-semibold">Cancellation window (hours)<input className="mt-1 block w-full rounded-lg border border-neutral-300 p-2" type="number" min="1" step="1" value={cancellationWindowHours} onChange={(event) => setCancellationWindowHours(event.target.value)} required /></label>
+      <label className="block text-sm font-semibold">Booking lead time (days)<input className="mt-1 block w-full rounded-lg border border-neutral-300 p-2" type="number" min="1" step="1" value={bookingLeadTimeDays} onChange={(event) => setBookingLeadTimeDays(event.target.value)} required /></label>
+      <label className="block text-sm font-semibold">Supported cities (comma-separated, empty = all allowed)<input className="mt-1 block w-full rounded-lg border border-neutral-300 p-2" type="text" value={supportedCitiesText} onChange={(event) => setSupportedCitiesText(event.target.value)} /></label>
+      {settingsError && <p className="text-sm text-red-600">{settingsError}</p>}
+      <Button type="submit" disabled={isSavingSettings}>{isSavingSettings ? 'Saving…' : 'Save settings'}</Button>
+    </form>}
     </>}
   </Card>
 }

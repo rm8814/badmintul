@@ -1523,3 +1523,54 @@ None beyond the incomplete Venues-view fix above.
 
 ### Follow-up tasks created
 - **Task 47b (new, appended to `TASKS.md`):** Finish Task 47a's third control — add `disabled`/pending-label treatment to the Venues view's Suspend/Unsuspend button in `SuperadminPanel.tsx`, using the `moderationAction` state that already exists and is already correctly set by `toggleSuspended` (only the button's JSX needs updating, not the handler).
+
+---
+
+## Tasks 50-54 — Complete superadmin dashboard (Phase 16)
+
+**Date completed:** 2026-09-20
+**Implemented by:** Claude (directly, not Codex — explicit user instruction "you execute 50-54" because Codex's usage quota was exhausted; this is a deliberate, user-authorized deviation from the normal plan/implement split described in CLAUDE.md)
+**Reviewed by:** Claude Code (self-review, since Claude was also the implementer here — flagged as a process deviation below)
+
+### Acceptance criteria check (Task 50 — All Bookings view)
+- [x] Superadmin sees every booking platform-wide at `/admin/bookings`, enriched with venue/court/player/time/status — `admin.ts`'s new `listAllBookings` joins `bookings` → `courts` → `venues` and `users`, returning `{_id, startTime, endTime, status, courtName, venueName, playerEmail}`. Verified by a real `convexTest` call in `platform-settings.test.ts` asserting the exact returned shape, not string-matching.
+- [x] Non-superadmin rejected — explicit negative test (`listAllBookings` as a player throws `'Superadmin role required'`).
+- [x] "All Bookings" sidebar nav item added to `AppShell.tsx`'s `roleNav.superadmin`.
+- [x] `npm test` (113/113) and `npm run build` pass.
+
+### Acceptance criteria check (Task 51 — Platform Settings infrastructure)
+- [x] `getPlatformSettings` returns `{cancellationWindowHours: 2, bookingLeadTimeDays: 3, supportedCities: []}` when no record exists, and stored values afterward — verified via `convexTest`, not assumed.
+- [x] `updatePlatformSettings` is superadmin-gated (negative test included) and validates `cancellationWindowHours > 0` / `bookingLeadTimeDays > 0` (negative test included); trims/dedupes/filters empty strings from `supportedCities`.
+- [x] "Settings" sidebar nav item added.
+- [x] `npm test` and `npm run build` pass.
+- **Design note:** `getSettingsOrDefaults(ctx)` in `convex/settings.ts` is a plain importable async function, not a Convex query itself — this is what lets `bookings.ts` and `venues.ts` read settings inside their own mutation's `ctx` in Tasks 52-54 without a separate `runQuery` round-trip, preserving R-4's single-mutation atomicity guarantee.
+
+### Acceptance criteria check (Task 52 — Cancellation window wiring)
+- [x] With no settings configured, behavior is unchanged (2-hour default) — the pre-existing Task 8 cancellation test passes unmodified after this change.
+- [x] After a superadmin sets a non-default `cancellationWindowHours` (tested with 5), a booking that would have been cancellable under the old hardcoded 2-hour window is now correctly rejected — explicit test in `platform-settings.test.ts` (Task 52 describe block).
+- [x] `npm test` and `npm run build` pass.
+
+### Acceptance criteria check (Task 53 — Booking lead-time wiring)
+- [x] Server-side enforcement added inside `createBooking` itself (same mutation as the existing conflict/block checks — no separate read-then-write, preserving R-4 atomicity). Verified by reading `convex/bookings.ts`: the lead-time check and the conflict/block checks all execute against the same `ctx` in one handler.
+- [x] Explicit test proves a direct mutation call beyond the configured lead time is now rejected server-side — this closes a real, previously-uncovered gap (the UI clamp existed, but nothing stopped a direct API call before this task).
+- [x] Existing R-4 concurrent-booking race test (Task 8) still passes unmodified.
+- [x] `PlayerBrowsePanel`'s day-navigation "Next day" button now reads `maxDayOffset` from `getPlatformSettings` instead of the hardcoded `3`.
+- [x] `npm test` and `npm run build` pass.
+
+### Acceptance criteria check (Task 54 — Supported cities)
+- [x] `venues` schema gains `city: v.optional(v.string())`; `createVenueWithCourts` requires `city`, rejects blank city (`City is required`), and rejects a city not in `supportedCities` once that list is non-empty — all server-side, verified by explicit tests (blank city, unsupported city, and the accepted case).
+- [x] Empty supported-cities list doesn't block venue submission — explicit test confirms any non-empty city is accepted when the list is empty (the pre-Task-54 default state).
+- [x] `VenueOwnerPanel`'s submission form renders a `<Select>` sourced from `getPlatformSettings().supportedCities` when non-empty, falling back to a plain text `TextField` when empty.
+- [x] `npm test` and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT for all five tasks: yes. No payment integration, no server process outside Convex, no city search/filter UI, no settings audit log, no retroactive city backfill — all correctly left out per each task's OUT boundary.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+- **Process deviation, explicitly authorized:** Claude implemented these tasks directly instead of Codex, per the user's direct instruction ("you execute 50-54") issued because Codex's usage quota was exhausted for the day. This means the normal plan/implement separation in `CLAUDE.md` didn't hold for this batch, and this review is self-review rather than independent review — the user should treat this REVIEW.md entry with that in mind, and may want a second look (their own, or Codex once quota resets) at the `createBooking`/`cancelBooking` atomicity claims in particular, since that's the area with the highest blast radius (R-4).
+- Test-quality note: new tests in `src/lib/platform-settings.test.ts` follow the project's established stronger pattern (real `convexTest` calls against actual mutations/queries, asserting real return shapes and thrown errors) rather than the weaker string-matching pattern that caused missed regressions in Tasks 43/44a/47a.
+- Task 47b remains on hold, unaffected by this work, per the user's earlier instruction — not touched in this batch.
+
+### Follow-up tasks created
+- None. Recommend the user (or Codex, once quota resets) spot-check the `createBooking`/`cancelBooking` changes in `convex/bookings.ts` given the self-review caveat above.

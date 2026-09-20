@@ -9,7 +9,7 @@ describe('Task 7 approved venue browse', () => {
   it('returns approved venues and excludes pending venues', async () => {
     const t = convexTest(schema, modules)
     const ownerId = await t.run((ctx) => ctx.db.insert('users', { email: 'browse-owner@example.com', role: 'venueOwner' }))
-    const venueId = await t.withIdentity({ subject: ownerId }).mutation(api.venues.createVenueWithCourts, { name: 'Pending venue', address: 'Address', description: '', photos: [], courts: [{ name: 'Court 1', pricePerHour: 100, operatingHours: { open: '08:00', close: '22:00' } }] })
+    const venueId = await t.withIdentity({ subject: ownerId }).mutation(api.venues.createVenueWithCourts, { name: 'Pending venue', address: 'Address', description: '', photos: [], city: 'Jakarta', courts: [{ name: 'Court 1', pricePerHour: 100, operatingHours: { open: '08:00', close: '22:00' } }] })
     expect((await t.query(api.venues.listApprovedVenues, {})).map((venue) => venue._id)).not.toContain(venueId)
     await t.run((ctx) => ctx.db.patch(venueId, { approvalStatus: 'approved' }))
     expect((await t.query(api.venues.listApprovedVenues, {})).map((venue) => venue._id)).toContain(venueId)

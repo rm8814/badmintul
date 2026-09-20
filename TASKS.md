@@ -1027,6 +1027,8 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 
 ## Task 50 — Superadmin: All Bookings view
 
+**Status: done (2026-09-20)** — implemented directly by Claude (Codex quota exhausted; user explicitly authorized this deviation). See REVIEW.md.
+
 **Goal:** Give the superadmin platform-wide booking visibility — `SPEC.md` §1 explicitly lists "view all bookings" as a superadmin capability, and no query or UI for this currently exists anywhere (only per-player and per-venue-owner scoped booking queries exist).
 
 **Scope boundaries:**
@@ -1040,6 +1042,8 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 4. `npm test` and `npm run build` pass.
 
 ## Task 51 — Platform Settings infrastructure
+
+**Status: done (2026-09-20)** — implemented directly by Claude. See REVIEW.md.
 
 **Goal:** Build the foundation for configurable global settings — a single settings record a superadmin can read and update, replacing the hardcoded constants Tasks 52–54 will wire into.
 
@@ -1055,6 +1059,8 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 
 ## Task 52 — Wire cancellation window into `cancelBooking`
 
+**Status: done (2026-09-20)** — implemented directly by Claude. See REVIEW.md.
+
 **Goal:** Replace the hardcoded `CANCELLATION_WINDOW_MS = 2 * 60 * 60 * 1000` in `convex/bookings.ts` with a read from the new platform settings, so a superadmin's configured value actually takes effect.
 
 **Scope boundaries:**
@@ -1067,6 +1073,8 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 3. `npm test` and `npm run build` pass.
 
 ## Task 53 — Wire booking lead-time into `createBooking` and the player browse UI
+
+**Status: done (2026-09-20)** — implemented directly by Claude. See REVIEW.md.
 
 **Goal:** Close a real, currently-existing gap: `PlayerBrowsePanel`'s date navigation is clamped to 3 days ahead in the UI (`Math.min(3, offset + 1)`), but `createBooking` itself has **no server-side check at all** — a direct mutation call can book arbitrarily far in the future today. Make the limit configurable and, critically, actually enforce it server-side.
 
@@ -1081,6 +1089,8 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 4. `npm test` and `npm run build` pass.
 
 ## Task 54 — Supported cities
+
+**Status: done (2026-09-20)** — implemented directly by Claude. See REVIEW.md.
 
 **Goal:** Add a `city` field to venues, constrained to a superadmin-managed list of supported cities, per `SPEC.md`'s "supported cities" setting.
 

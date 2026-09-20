@@ -14,6 +14,7 @@ import type * as bookings from "../bookings.js";
 import type * as connection from "../connection.js";
 import type * as http from "../http.js";
 import type * as roles from "../roles.js";
+import type * as settings from "../settings.js";
 import type * as venues from "../venues.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   connection: typeof connection;
   http: typeof http;
   roles: typeof roles;
+  settings: typeof settings;
   venues: typeof venues;
 }>;
 

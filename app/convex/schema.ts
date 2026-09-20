@@ -23,6 +23,7 @@ export default defineSchema({
     photos: v.array(v.string()),
     approvalStatus: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
     suspended: v.optional(v.boolean()),
+    city: v.optional(v.string()),
   }).index("by_ownerId", ["ownerId"]).index("by_approvalStatus", ["approvalStatus"]),
   courts: defineTable({
     venueId: v.id("venues"),
@@ -45,4 +46,9 @@ export default defineSchema({
   }).index("by_court_and_start", ["courtId", "startTime"]),
   connectionChecks: defineTable({ message: v.string(), updatedAt: v.number() })
     .index("by_updatedAt", ["updatedAt"]),
+  platformSettings: defineTable({
+    cancellationWindowHours: v.number(),
+    bookingLeadTimeDays: v.number(),
+    supportedCities: v.array(v.string()),
+  }),
 });

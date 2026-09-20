@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { getSettingsOrDefaults } from "./settings";
 
 export const getCourtAvailability = query({
   args: { courtId: v.id("courts"), dayStart: v.number(), dayEnd: v.number() },
@@ -90,6 +91,9 @@ export const createBooking = mutation({
   handler: async (ctx, args) => {
     const playerId = await requirePlayer(ctx);
     if (args.endTime <= args.startTime) throw new Error("Booking end time must be after start time");
+    const settings = await getSettingsOrDefaults(ctx);
+    const maxStart = Date.now() + settings.bookingLeadTimeDays * 86400000;
+    if (args.startTime > maxStart) throw new Error(`Bookings can only be made up to ${settings.bookingLeadTimeDays} day(s) in advance`);
     const court = await ctx.db.get(args.courtId);
     if (!court) throw new Error("Court not found");
     const conflicts = await ctx.db.query("bookings").withIndex("by_court_and_start", (q) => q.eq("courtId", args.courtId)).filter((q) => q.and(q.eq(q.field("status"), "confirmed"), q.lt(q.field("startTime"), args.endTime), q.gt(q.field("endTime"), args.startTime))).first();
@@ -108,8 +112,6 @@ export const listMyBookings = query({
   },
 });
 
-const CANCELLATION_WINDOW_MS = 2 * 60 * 60 * 1000;
-
 export const cancelBooking = mutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
@@ -117,7 +119,9 @@ export const cancelBooking = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking || booking.playerId !== playerId) throw new Error("Booking does not belong to the current player");
     if (booking.status !== "confirmed") throw new Error("Booking is already cancelled");
-    if (booking.startTime - Date.now() < CANCELLATION_WINDOW_MS) throw new Error("Bookings can only be cancelled at least 2 hours before start time");
+    const settings = await getSettingsOrDefaults(ctx);
+    const cancellationWindowMs = settings.cancellationWindowHours * 3600000;
+    if (booking.startTime - Date.now() < cancellationWindowMs) throw new Error(`Bookings can only be cancelled at least ${settings.cancellationWindowHours} hours before start time`);
     await ctx.db.patch(args.bookingId, { status: "cancelled" });
   },
 });

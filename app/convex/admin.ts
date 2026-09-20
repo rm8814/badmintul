@@ -37,6 +37,31 @@ export const listUsers = query({
   },
 });
 
+export const listAllBookings = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSuperadmin(ctx);
+    const bookings = await ctx.db.query("bookings").collect();
+    const courts = new Map((await ctx.db.query("courts").collect()).map((court) => [court._id, court]));
+    const venues = new Map((await ctx.db.query("venues").collect()).map((venue) => [venue._id, venue]));
+    const users = new Map((await ctx.db.query("users").collect()).map((user) => [user._id, user]));
+    return bookings.map((booking) => {
+      const court = courts.get(booking.courtId);
+      const venue = court ? venues.get(court.venueId) : undefined;
+      const player = users.get(booking.playerId);
+      return {
+        _id: booking._id,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        status: booking.status,
+        courtName: court?.name ?? "Unknown court",
+        venueName: venue?.name ?? "Unknown venue",
+        playerEmail: player?.email ?? "Unknown player",
+      };
+    });
+  },
+});
+
 export const setVenueApproval = mutation({
   args: { venueId: v.id("venues"), status: v.union(v.literal("approved"), v.literal("rejected")) },
   handler: async (ctx, args) => {

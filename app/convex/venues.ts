@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { getSettingsOrDefaults } from "./settings";
 
 const courtValidator = v.object({
   name: v.string(),
@@ -30,11 +31,16 @@ export const createVenueWithCourts = mutation({
     description: v.string(),
     photos: v.array(v.string()),
     courts: v.array(courtValidator),
+    city: v.string(),
   },
   handler: async (ctx, args) => {
     const ownerId = await requireVenueOwner(ctx);
     validateText(args.name, "Venue name");
     validateText(args.address, "Address");
+    validateText(args.city, "City");
+    const settings = await getSettingsOrDefaults(ctx);
+    const city = args.city.trim();
+    if (settings.supportedCities.length > 0 && !settings.supportedCities.includes(city)) throw new Error("City is not currently supported");
     if (args.courts.length < 1) throw new Error("At least one court is required");
     for (const court of args.courts) {
       validateText(court.name, "Court name");
@@ -49,6 +55,7 @@ export const createVenueWithCourts = mutation({
       description: args.description.trim(),
       photos: args.photos,
       approvalStatus: "pending",
+      city,
     });
     for (const court of args.courts) await ctx.db.insert("courts", { venueId, ...court });
     return venueId;
