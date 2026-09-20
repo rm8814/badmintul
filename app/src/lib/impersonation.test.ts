@@ -88,3 +88,24 @@ describe('Superadmin view-as (impersonation)', () => {
     await expect(t.withIdentity({ subject: ids.owner }).query(api.admin.listImpersonatableUsers, { role: 'player' })).rejects.toThrow('Superadmin role required')
   })
 })
+
+describe('Superadmin View As activity log', () => {
+  it('rejects non-superadmins and shows real impersonated activity enriched with actor/target emails', async () => {
+    const t = convexTest(schema, modules)
+    const ids = await t.run(async (ctx) => {
+      const admin = await ctx.db.insert('users', { email: 'log-admin@example.com', role: 'superadmin' })
+      const player = await ctx.db.insert('users', { email: 'log-player@example.com', role: 'player' })
+      const owner = await ctx.db.insert('users', { email: 'log-owner@example.com', role: 'venueOwner' })
+      const venue = await ctx.db.insert('venues', { ownerId: owner, name: 'Log Venue', address: 'Addr', description: '', photos: [], approvalStatus: 'approved', city: 'Jakarta' })
+      const court = await ctx.db.insert('courts', { venueId: venue, name: 'Court 1', pricePerHour: 100, operatingHours: { open: '00:00', close: '23:59' } })
+      return { admin, player, owner, court }
+    })
+    await expect(t.withIdentity({ subject: ids.player }).query(api.admin.listImpersonationLogs, {})).rejects.toThrow('Superadmin role required')
+    expect(await t.withIdentity({ subject: ids.admin }).query(api.admin.listImpersonationLogs, {})).toEqual([])
+    const startTime = Date.now() + 3600000
+    await t.withIdentity({ subject: ids.admin }).mutation(api.bookings.createBooking, { courtId: ids.court, startTime, endTime: startTime + 3600000, asUserId: ids.player })
+    const logs = await t.withIdentity({ subject: ids.admin }).query(api.admin.listImpersonationLogs, {})
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({ actorEmail: 'log-admin@example.com', targetEmail: 'log-player@example.com', action: 'createBooking' })
+  })
+})

@@ -1601,4 +1601,28 @@ None beyond the incomplete Venues-view fix above.
 - Audit log is write-only in this task — there's no admin UI to read `impersonationLogs` yet. If the user wants to review impersonation history later, that's a small follow-up (a `listImpersonationLogs` superadmin query + a view), not included here since it wasn't asked for.
 
 ### Follow-up tasks created
-- None yet. Suggested but not created: an admin-facing view of `impersonationLogs` (currently write-only), if the user wants to audit view-as usage later.
+- **Task 56 (created and completed same day):** an admin-facing viewer for `impersonationLogs` — see below.
+
+---
+
+## Task 56 — Superadmin: View As activity log viewer
+
+**Date completed:** 2026-09-20
+**Implemented by:** Claude (directly, not Codex — same authorized deviation, user said "yes add a viewer for the impersonation logs")
+**Reviewed by:** Claude Code (self-review — same process caveat as Tasks 50-55, though this task is read-only and lower-risk than Task 55 itself)
+
+### Acceptance criteria check
+- [x] Non-superadmin rejected — explicit negative test (`listImpersonationLogs` as a player throws `'Superadmin role required'`).
+- [x] Real activity shown, not placeholder — test performs an actual impersonated `createBooking` call, then reads it back via `listImpersonationLogs` and asserts `{actorEmail, targetEmail, action}` match the real emails and action, not just that a row exists.
+- [x] "View As Log" sidebar item added to `AppShell.tsx`'s `roleNav.superadmin`.
+- [x] `npm test` (121/121) and `npm run build` pass.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes. No search/filter UI, no retention/deletion logic added.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+- Same process deviation as Tasks 50-55 (Claude implemented and reviewed directly, Codex still out of quota) — flagged for completeness, but this task is read-only (a query plus a display view) with materially lower risk than Task 55's authorization surface, so the self-review caveat matters less here.
+
+### Follow-up tasks created
+- None.

@@ -71,6 +71,22 @@ export const listAllBookings = query({
   },
 });
 
+export const listImpersonationLogs = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSuperadmin(ctx);
+    const logs = await ctx.db.query("impersonationLogs").order("desc").collect();
+    const users = new Map((await ctx.db.query("users").collect()).map((user) => [user._id, user]));
+    return logs.map((log) => ({
+      _id: log._id,
+      createdAt: log.createdAt,
+      action: log.action,
+      actorEmail: users.get(log.actorId)?.email ?? "Unknown superadmin",
+      targetEmail: users.get(log.targetUserId)?.email ?? "Unknown user",
+    }));
+  },
+});
+
 export const setVenueApproval = mutation({
   args: { venueId: v.id("venues"), status: v.union(v.literal("approved"), v.literal("rejected")) },
   handler: async (ctx, args) => {

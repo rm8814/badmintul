@@ -1123,3 +1123,21 @@ Against that: approval queue, metrics, venue moderation, and user moderation are
 4. A superadmin acting as a venue owner can submit venues / manage court blocks correctly attributed to the target owner's id.
 5. The account picker exposes only `{_id, email}` — no other user fields leak into the picker.
 6. `npm test` and `npm run build` pass.
+
+---
+
+## Task 56 — Superadmin: View As activity log viewer
+
+**Status: done (2026-09-20)** — implemented directly by Claude (Codex quota still exhausted; same authorized deviation). See REVIEW.md.
+
+**Goal:** Close Task 55's follow-up gap — `impersonationLogs` was write-only, with no way for a superadmin to actually review View As activity. Give it a read surface.
+
+**Scope boundaries:**
+- IN: A new superadmin-only `listImpersonationLogs` query in `convex/admin.ts`, returning logs newest-first, enriched with `actorEmail`/`targetEmail` (looked up from `users`, matching the existing enrichment pattern in `listAllBookings`) instead of raw ids. A new `/admin/view-as-log` view on `SuperadminPanel` and a matching "View As Log" sidebar item.
+- OUT: No filtering/search UI (matches this project's established "don't over-invest in search UX" principle). No log deletion or retention policy — that's a separate decision if it's ever needed.
+
+**Acceptance criteria:**
+1. A non-superadmin cannot call `listImpersonationLogs` — explicit negative test.
+2. Real impersonated activity (not a placeholder) shows up in the log, enriched with actor and target email — explicit test that performs an impersonated action and then reads it back via the query.
+3. "View As Log" appears as a distinct sidebar nav item for the superadmin role.
+4. `npm test` and `npm run build` pass.

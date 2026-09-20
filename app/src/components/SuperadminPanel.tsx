@@ -8,7 +8,7 @@ import Select from './ui/Select'
 import PlayerBrowsePanel from './PlayerBrowsePanel'
 import VenueOwnerPanel from './VenueOwnerPanel'
 
-export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' | 'bookings' | 'settings' | 'viewAs' }) {
+export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | 'metrics' | 'venues' | 'users' | 'bookings' | 'settings' | 'viewAs' | 'impersonationLog' }) {
   const { isAuthenticated } = useConvexAuth()
   const user = useQuery(api.roles.getCurrentUser)
   const pending = useQuery(api.admin.listPendingVenues, user?.role === 'superadmin' ? {} : 'skip')
@@ -26,6 +26,7 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
   const [viewAsRole, setViewAsRole] = useState<'player' | 'venueOwner'>('player')
   const [viewAsUserId, setViewAsUserId] = useState('')
   const impersonatableUsers = useQuery(api.admin.listImpersonatableUsers, user?.role === 'superadmin' && view === 'viewAs' ? { role: viewAsRole } : 'skip')
+  const impersonationLogs = useQuery(api.admin.listImpersonationLogs, user?.role === 'superadmin' && view === 'impersonationLog' ? {} : 'skip')
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [cancellationWindowHours, setCancellationWindowHours] = useState('')
@@ -106,6 +107,11 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
     </div>
     <div className="mt-3 max-w-sm">{impersonatableUsers === undefined ? <div className="animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading accounts…</div> : impersonatableUsers.length ? <Select id="view-as-account" label="Account" value={viewAsUserId} onChange={(event) => setViewAsUserId(event.target.value)}><option value="">Select an account</option>{impersonatableUsers.map((candidate) => <option key={candidate._id} value={candidate._id}>{candidate.email}</option>)}</Select> : <p className="text-sm text-neutral-600">No {viewAsRole === 'player' ? 'player' : 'venue owner'} accounts available.</p>}</div>
     {viewAsUserId && <div className="mt-5">{viewAsRole === 'player' ? <PlayerBrowsePanel asUserId={viewAsUserId} onExitViewAs={() => setViewAsUserId('')} /> : <VenueOwnerPanel asUserId={viewAsUserId} onExitViewAs={() => setViewAsUserId('')} />}</div>}
+    </>}
+    {view === 'impersonationLog' && <>
+    <h3 className="mt-6 font-semibold">View As activity log</h3>
+    <p className="mt-1 text-sm text-neutral-600">Every action taken while a superadmin was viewing as another account, most recent first.</p>
+    {impersonationLogs === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading activity log…</div> : impersonationLogs.length ? <div className="mt-3 space-y-2">{impersonationLogs.map((log) => <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-2 text-sm" key={log._id}><span>{log.actorEmail} acted as <span className="font-semibold">{log.targetEmail}</span> · {log.action}</span><span className="text-neutral-500">{new Date(log.createdAt).toLocaleString()}</span></div>)}</div> : <p className="mt-2 text-neutral-600">No View As activity yet.</p>}
     </>}
   </Card>
 }
