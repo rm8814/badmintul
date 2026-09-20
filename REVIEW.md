@@ -1494,3 +1494,32 @@ None beyond the safety gap above.
 
 ### Follow-up tasks created
 - **Task 49a (new, appended to `TASKS.md`, priority):** Prevent self-suspension. Recommend a server-side guard in `setUserSuspended` (reject if `userId === callerId`) as the primary fix — per this project's own standing rule that authorization/safety checks belong at the Convex function level, not only in the UI — plus a client-side disable/hide on the current user's own row as a secondary, non-load-bearing UX nicety.
+## Tasks 47a and 49a — Moderation pending states and self-suspension guard
+
+**Date completed:** 2026-09-19
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+**Note:** Codex correctly marked this "Pending independent review." Task 49a (the priority safety fix) is genuinely, fully correct — both the server-side guard and the client-side self-exclusion were verified independently, including live in a browser. Task 47a is **only partially done**: two of its three controls were fixed correctly, but the venue-suspend button in the "Venues" view was missed entirely, and the new test doesn't catch this because it string-matches the presence of the right code elsewhere in the same file rather than checking that specific button.
+
+### Acceptance criteria check (Task 49a)
+- [x] **Server-side guard — verified via a real test, re-run.** `admin.test.ts`'s new test seeds a superadmin and calls `setUserSuspended` on their own id with `suspended: true`, asserting rejection with `'cannot suspend their own account'`. Read the actual guard in `convex/admin.ts`: `requireSuperadmin` now returns the caller's id, and `setUserSuspended` checks `args.userId === callerId && args.suspended === true` before patching — correctly scoped to *suspending* only (self-unsuspend is a non-issue anyway, since a suspended user can't call any superadmin function to begin with, including this one).
+- [x] **Client-side exclusion — verified live, not just in source.** Navigated to `/admin/users` as `demo@example.com`: the row for that account shows "Current account" / "Your account" with **no button at all**, not just a disabled one — a cleaner fix than "disabled" would have been, since there's no way to even attempt the action.
+- [x] Other-user suspension unaffected — the existing `admin.test.ts` suspension test (suspend a different user, confirm rejection of their subsequent calls) is untouched and still passes.
+- [x] `npm test` (107/107, re-run) and `npm run build` pass; `git diff --stat app/convex/` shows a 4-line change to `admin.ts` only — exactly the minimal guard requested, no scope creep.
+
+### Acceptance criteria check (Task 47a)
+- [x] `deleteBlock` (`VenueOwnerPanel.tsx`) — verified: `removingBlockId` state, button shows `disabled={removingBlockId !== null}` and "Removing…" — correctly fixed.
+- [x] `toggleUserSuspended` (`SuperadminPanel.tsx`, Users view) — verified: `moderationAction` state, button shows `disabled={moderationAction !== null}` and "Saving…" — correctly fixed.
+- [ ] **`toggleSuspended` (`SuperadminPanel.tsx`, Venues view) — NOT fixed, despite the acceptance criteria explicitly naming it.** The handler function itself does set `moderationAction` correctly (confirmed in the diff — `setModerationAction(`venue:${venueId}`)` wraps the `setVenueSuspended` call), but the Venues view's actual `<Button>` JSX was never updated to read that state: no `disabled` prop, no conditional label — it's byte-for-byte the same button as before this task. A rapid double-click on a venue's Suspend button can still fire two `setVenueSuspended` calls. This is a genuine, verifiable partial-completion gap, not a difference of interpretation — the original task explicitly named "venue suspension" as one of the three controls to fix.
+- [x] `npm test` (107/107) and `npm run build` pass — but this doesn't catch the gap above, because `moderation-pending.test.ts` only asserts `adminSource` (the whole file's raw text) *contains* `moderationAction !== null` somewhere — which is true, since the Users-view button has it — without checking that the *specific* Venues-view button does too. This is the same "string exists somewhere in the file" failure mode flagged repeatedly in this project's history (Task 43's original SEO regression, Task 44a's `aria-hidden` regression) — the fix pattern for catching it (test the actual behavior/DOM output, not source text) still hasn't been applied consistently to every new test in this codebase.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes for Task 49a. Task 47a's scope boundary is met for 2 of 3 named controls; the third is simply incomplete, not out-of-scope work.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None beyond the incomplete Venues-view fix above.
+
+### Follow-up tasks created
+- **Task 47b (new, appended to `TASKS.md`):** Finish Task 47a's third control — add `disabled`/pending-label treatment to the Venues view's Suspend/Unsuspend button in `SuperadminPanel.tsx`, using the `moderationAction` state that already exists and is already correctly set by `toggleSuspended` (only the button's JSX needs updating, not the handler).

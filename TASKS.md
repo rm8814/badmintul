@@ -992,3 +992,19 @@ Added 2026-09-19. Found while designing the sidebar menu structure per role: thr
 2. Suspending a *different* user still works exactly as before — verify the existing `admin.test.ts` suspension test still passes unchanged.
 3. The current user's own row in `/admin/users` does not offer a functioning Suspend action (disabled or hidden) — verify live.
 4. `npm test` and `npm run build` pass.
+
+---
+
+## Task 47b — Finish Task 47a: venue-suspend button pending state
+
+**Goal:** Task 47a fixed pending/disabled states on `deleteBlock` and `toggleUserSuspended`, but missed the third control it explicitly named: the Venues view's Suspend/Unsuspend button in `SuperadminPanel.tsx`. Confirmed by reading the current code: `toggleSuspended`'s handler already sets `moderationAction` state correctly (this part of Task 47a *was* done), but the Venues view's `<Button>` element itself was never updated to read that state — no `disabled` prop, no pending label. A rapid double-click can still fire two `setVenueSuspended` calls.
+
+**Scope boundaries:**
+- IN: Update the Venues view's Suspend/Unsuspend `<Button>` in `SuperadminPanel.tsx` to use the existing `moderationAction` state — `disabled={moderationAction !== null}` and a pending label (e.g. "Saving…"), matching the exact pattern already correctly applied to the Users view's button in the same file.
+- OUT: No other changes — the handler function itself is already correct, only the button's JSX needs updating.
+
+**Acceptance criteria:**
+1. Clicking Suspend/Unsuspend in the Venues view disables that button and shows a pending label for the duration of the call.
+2. A second click while pending does not fire a second mutation call.
+3. Add or update a test that checks the *specific* Venues-view button's rendered output/props, not just that the string `moderationAction !== null` exists somewhere in the file — the prior test passed despite this exact gap because it only checked the string existed anywhere, and it already existed in the Users-view button.
+4. `npm test` and `npm run build` pass.
