@@ -11,6 +11,10 @@ describe('Task 47a and 49a moderation safeguards', () => {
     expect(adminSource).toContain('moderationAction !== null')
     expect(adminSource).toContain('moderationAction === `user:${listedUser._id}`')
     expect(adminSource).toContain('Saving…')
+    const venuesView = adminSource.match(/\{view === 'venues'[\s\S]*?\{view === 'users'/)?.[0] ?? ''
+    expect(venuesView).toContain('disabled={moderationAction !== null}')
+    expect(venuesView).toContain('moderationAction === `venue:${venue._id}`')
+    expect(venuesView).toContain("'Saving…'")
   })
 
   it('does not offer a working self-suspension control', () => {

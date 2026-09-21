@@ -1626,3 +1626,27 @@ None beyond the incomplete Venues-view fix above.
 
 ### Follow-up tasks created
 - None.
+
+---
+
+## Task 47b — Venue moderation pending state
+
+**Date completed:** 2026-09-21
+**Implemented by:** Codex
+**Reviewed by:** Claude Code
+
+### Acceptance criteria check
+- [x] Criterion 1 — verified by reading `SuperadminPanel.tsx`: the Venues-view button now has `disabled={moderationAction !== null}` and renders `'Saving…'` while `moderationAction === \`venue:${venue._id}\``, matching the pattern already correct on the Users-view button since Task 47a/49a.
+- [x] Criterion 2 — `disabled` on a native `<button>` (via the shared `Button` component) means React does not invoke `onClick` on a second click while pending; this is the same mechanism already verified correct for the Users-view and `deleteBlock` controls, not new/unverified behavior.
+- [x] Criterion 3 — verified this is a real fix to the exact gap flagged before: the new test in `moderation-pending.test.ts` uses `adminSource.match(/\{view === 'venues'[\s\S]*?\{view === 'users'/)` to isolate only the Venues-view JSX block, then asserts `disabled={moderationAction !== null}`, the venue-specific pending-check expression, and `'Saving…'` *within that scoped substring* — confirmed this would have caught the original bug (the old blanket `adminSource.toContain(...)` checks passed even when only the Users-view button had these props, since the string existed elsewhere in the file; the new regex-scoped check cannot pass on the Users-view button alone).
+- [x] Criterion 4 — re-ran independently: `npm test` 121/121 passing, `npm run build` clean.
+
+### Scope boundary check
+- Stayed inside declared IN/OUT: yes — `git diff` shows exactly one JSX line changed in `SuperadminPanel.tsx` (the Venues-view button) plus the corresponding test, nothing else touched.
+- Out-of-scope work done anyway: none.
+
+### Deviations / notes
+None. This closes Phase 15 entirely — no open items remain in that phase.
+
+### Follow-up tasks created
+- None.

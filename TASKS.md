@@ -1009,7 +1009,7 @@ Added 2026-09-19. Found while designing the sidebar menu structure per role: thr
 3. Add or update a test that checks the *specific* Venues-view button's rendered output/props, not just that the string `moderationAction !== null` exists somewhere in the file — the prior test passed despite this exact gap because it only checked the string existed anywhere, and it already existed in the Users-view button.
 4. `npm test` and `npm run build` pass.
 
-**Status: on hold** (2026-09-20) — Codex's usage limit is exhausted until tomorrow. Do not hand this off until then. Phase 16 below is planned in the meantime and can be handed off once capacity returns, either before or after Task 47b — they don't conflict.
+**Status: done (2026-09-21)** — implemented by Codex once quota reset, reviewed and verified by Claude Code. See REVIEW.md.
 
 ---
 

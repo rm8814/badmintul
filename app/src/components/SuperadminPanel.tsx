@@ -78,7 +78,7 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
     </>}
     {view === 'venues' && <>
     <h3 className="mt-6 font-semibold">All venues</h3>
-    {venues === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading venues…</div> : venues.length ? venues.map((venue) => <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={venue._id}><div><p className="font-semibold">{venue.name}</p><p className="text-sm text-neutral-600">{venue.address} · {venue.approvalStatus}{venue.suspended ? ' · Suspended' : ''}</p></div><Button variant={venue.suspended ? 'secondary' : 'danger'} onClick={() => void toggleSuspended(venue._id, !venue.suspended)}>{venue.suspended ? 'Unsuspend' : 'Suspend'}</Button></div>) : <p className="mt-2 text-neutral-600">No venues found.</p>}
+    {venues === undefined ? <div className="mt-2 animate-pulse rounded-lg bg-neutral-100 p-4 text-sm text-neutral-500" role="status">Loading venues…</div> : venues.length ? venues.map((venue) => <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3" key={venue._id}><div><p className="font-semibold">{venue.name}</p><p className="text-sm text-neutral-600">{venue.address} · {venue.approvalStatus}{venue.suspended ? ' · Suspended' : ''}</p></div><Button variant={venue.suspended ? 'secondary' : 'danger'} disabled={moderationAction !== null} onClick={() => void toggleSuspended(venue._id, !venue.suspended)}>{moderationAction === `venue:${venue._id}` ? 'Saving…' : venue.suspended ? 'Unsuspend' : 'Suspend'}</Button></div>) : <p className="mt-2 text-neutral-600">No venues found.</p>}
     </>}
     {view === 'users' && <>
     <h3 className="mt-6 font-semibold">All users</h3>
@@ -115,3 +115,4 @@ export default function SuperadminPanel({ view = 'queue' }: { view?: 'queue' | '
     </>}
   </Card>
 }
+
